@@ -1,0 +1,255 @@
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { useMatch } from 'react-router-dom'
+import { buildGraph } from '../mock/graph'
+import { DEFAULT_SCENARIO } from '../mock/user'
+import { NoraEngine } from '../nora/noraEngine'
+import type { NoraState, NoraStatus } from '../nora/noraMachine'
+import { getSkill } from '../nora/skillRegistry'
+import { answer, type AiAnswer } from './assistant'
+import { actions as profileActions, getState as getProfileState, subscribe as subscribeProfile, useStore } from './store'
+import type { Agent } from './types'
+import { ReferralModal } from './ui/ReferralModal'
+import { graphChanges } from './ui/graphDiff'
+
+export interface ChatTurn { id: number; role: 'user' | 'ai'; text?: string; answer?: AiAnswer }
+
+interface Chat {
+  /** The agent the conversation is about (the profile being viewed, else you). */
+  agent: Agent
+  turns: ChatTurn[]
+  pending: boolean
+  ask: (question: string) => void
+  clear: () => void
+}
+
+interface Ctx {
+  engine: NoraEngine
+  open: boolean
+  setOpen: (open: boolean) => void
+  chat: Chat
+  openReferral: (agentId: string, text?: string) => void
+  /** Restore the seed data, restart NORA on the live profile and clear the chat. */
+  resetDemo: () => void
+  /** "Fix this with NORA": open the panel, target the matching action, start it, and narrate in the chat. */
+  fix: (domain?: string) => void
+  /** Bumps whenever something asks NORA to take the user's attention (scrolls the target card into view). */
+  focusTick: number
+  /** True while NORA is actively working (reading, validating, drafting, writing). */
+  processing: boolean
+  /** Stop the run in progress (not possible once it is writing). */
+  stop: () => void
+  /** Bring NORA up in the centre of the screen. */
+  greet: () => void
+}
+
+const NoraCtx = createContext<Ctx | null>(null)
+const GREETED = 'nora-greeted'
+/** How long after login (or after switching to someone else's profile) NORA waits before appearing. */
+export const GREET_DELAY_MS = 5000
+
+/** Engine states in which NORA is working rather than waiting for the user. */
+const PROCESSING = new Set<NoraStatus>(['SKILL_APPROVED', 'READING', 'VALIDATING', 'DRAFT_READY', 'WRITING'])
+
+/**
+ * App-wide NORA: one engine (state survives navigation), one chat, one panel open/closed flag.
+ * The engine also re-checks whenever the profile is edited elsewhere (Edit Profile, About).
+ */
+export function NoraProvider({ children }: { children: ReactNode }) {
+  const [engine] = useState(() => new NoraEngine())
+  const nora = useSyncExternalStore(engine.subscribe, engine.getState)
+  // NORA greets the user in the centre of the screen a few seconds after login, once per session
+  // (refreshing keeps it minimized). Opening or minimizing it yourself first cancels the greeting.
+  const [open, setOpen] = useState(false)
+  useEffect(() => {
+    if (open) try { sessionStorage.setItem(GREETED, '1') } catch { /* storage unavailable */ }
+  }, [open])
+  useEffect(() => {
+    try { if (sessionStorage.getItem(GREETED) === '1') return } catch { /* greet anyway */ }
+    const t = setTimeout(() => {
+      try { if (sessionStorage.getItem(GREETED) === '1') return } catch { /* greet anyway */ }
+      setOpen(true)
+    }, GREET_DELAY_MS)
+    return () => clearTimeout(t)
+  }, [])
+  const [referral, setReferral] = useState<{ agentId: string; text?: string } | null>(null)
+  const [focusTick, setFocusTick] = useState(0)
+
+  /* engine lifecycle */
+  useEffect(() => {
+    void engine.reset(DEFAULT_SCENARIO)
+  }, [engine])
+  useEffect(() => {
+    return subscribeProfile(() => {
+      const s = engine.getState()
+      if (s.status !== 'SKILL_PROPOSED' && s.status !== 'EXPLORE') return
+      if (JSON.stringify(buildGraph()) !== JSON.stringify(s.graph)) void engine.refresh()
+    })
+  }, [engine])
+
+  const processing = PROCESSING.has(nora.status)
+  // A run that starts while NORA is minimized brings it up. Minimizing mid-run is allowed and sticks.
+  const wasProcessing = useRef(false)
+  useEffect(() => {
+    if (processing && !wasProcessing.current) setOpen(true)
+    wasProcessing.current = processing
+  }, [processing])
+
+  /* chat, scoped to the profile being viewed */
+  const match = useMatch('/profile/:id')
+  const store = useStore()
+  const agent = store.agents[match?.params.id ?? ''] ?? store.agents[store.viewerId]!
+  const [turns, setTurns] = useState<ChatTurn[]>([])
+  const [pending, setPending] = useState(false)
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const seq = useRef(0)
+
+  useEffect(() => {
+    clearTimeout(timer.current)
+    setTurns([])
+    setPending(false)
+  }, [agent.id])
+  useEffect(() => () => clearTimeout(timer.current), [])
+
+  // NORA appears a few seconds after you switch to a different profile. Opening or minimizing it yourself
+  // in the meantime cancels that, and a second switch restarts the wait.
+  const openRef = useRef(open)
+  const openChanges = useRef(0)
+  useEffect(() => {
+    openRef.current = open
+    openChanges.current++
+  }, [open])
+  const shownAgent = useRef<string | null>(null)
+  useEffect(() => {
+    const previous = shownAgent.current
+    shownAgent.current = agent.id
+    if (previous === null || previous === agent.id || openRef.current) return // first load, no switch, or already up
+    const stamp = openChanges.current
+    const t = setTimeout(() => {
+      if (!openRef.current && openChanges.current === stamp) setOpen(true)
+    }, GREET_DELAY_MS)
+    return () => clearTimeout(t)
+  }, [agent.id])
+
+  const agentId = agent.id
+  const ask = useCallback(
+    (question: string) => {
+      const q = question.trim()
+      if (!q) return
+      setOpen(true)
+      setTurns((t) => [...t, { id: ++seq.current, role: 'user', text: q }])
+      setPending(true)
+      clearTimeout(timer.current)
+      timer.current = setTimeout(() => {
+        const s = getProfileState()
+        const a = s.agents[agentId] ?? s.agents[s.viewerId]!
+        setTurns((t) => [...t, { id: ++seq.current, role: 'ai', answer: answer(a, s, q) }])
+        setPending(false)
+      }, 700)
+    },
+    [agentId],
+  )
+  const clear = useCallback(() => {
+    clearTimeout(timer.current)
+    setTurns([])
+    setPending(false)
+  }, [])
+
+  /** NORA speaking on its own initiative (no question to answer). */
+  const say = useCallback((text: string) => setTurns((t) => [...t, { id: ++seq.current, role: 'ai', answer: { text } }]), [])
+
+  /* "fix this with NORA": narrate the run it started */
+  const fixing = useRef(false)
+  const fix = useCallback(
+    (domain?: string) => {
+      setOpen(true)
+      setFocusTick((n) => n + 1)
+      const s = engine.getState()
+      if (PROCESSING.has(s.status) || s.status === 'WRITE_APPROVAL') return // already underway: just bring it into view
+      const target = s.evaluations.filter((e) => e.rank).sort((a, b) => a.rank! - b.rank!).find((e) => !domain || getSkill(e.skillId)?.domain === domain)
+      if (s.status !== 'SKILL_PROPOSED' || !target) {
+        setTurns((t) => [...t, { id: ++seq.current, role: 'user', text: 'Fix this with NORA' }])
+        say('There’s nothing to fix right now. Your profile data is in good shape.')
+        return
+      }
+      engine.select(target.skillId)
+      fixing.current = true
+      setTurns((t) => [...t, { id: ++seq.current, role: 'user', text: `Fix: ${target.name}` }])
+      say('On it. I’m reading your data and preparing a draft. Nothing changes until you approve it.')
+      void engine.approveStart()
+    },
+    [engine, say],
+  )
+
+  // follow the run it started
+  const lastStatus = useRef<NoraStatus>(nora.status)
+  useEffect(() => {
+    const changed = nora.status !== lastStatus.current
+    lastStatus.current = nora.status
+    if (!changed || !fixing.current) return
+    if (nora.status === 'WRITE_APPROVAL') say('The draft is ready. Review the before and after in the card above, then approve to apply it.')
+    else if (nora.status === 'COMPLETED') {
+      const changes = nora.previousGraph && nora.graph ? graphChanges(nora.previousGraph, nora.graph) : []
+      say(changes.length ? `Done. ${changes.map((c) => `${c.path} ${c.before} → ${c.after}`).join(', ')}.` : 'Done.')
+      fixing.current = false
+    } else if (nora.status === 'REJECTED') {
+      say('No changes made.')
+      fixing.current = false
+    } else if (nora.status === 'ERROR') fixing.current = false
+  }, [nora, say])
+
+  const stop = useCallback(() => {
+    void engine.stop()
+    // stop + re-evaluate happen in one tick, so narrate here rather than from a status change
+    if (fixing.current) {
+      fixing.current = false
+      say('Stopped. Nothing was changed.')
+    }
+  }, [engine, say])
+  const greet = useCallback(() => setOpen(true), [])
+  const resetDemo = useCallback(() => {
+    profileActions.reset()
+    clear()
+    fixing.current = false
+    void engine.reset(DEFAULT_SCENARIO)
+    setOpen(true) // a reset is a fresh start: NORA greets again
+  }, [engine, clear])
+  const openReferral = useCallback((id: string, text?: string) => setReferral({ agentId: id, text }), [])
+  const chat = useMemo<Chat>(() => ({ agent, turns, pending, ask, clear }), [agent, turns, pending, ask, clear])
+  const value = useMemo<Ctx>(
+    () => ({ engine, open, setOpen, chat, openReferral, resetDemo, fix, focusTick, processing, stop, greet }),
+    [engine, open, chat, openReferral, resetDemo, fix, focusTick, processing, stop, greet],
+  )
+
+  const target = referral ? getProfileState().agents[referral.agentId] : undefined
+  return (
+    <NoraCtx.Provider value={value}>
+      {children}
+      {referral && target && <ReferralModal agent={target} initialText={referral.text} onClose={() => setReferral(null)} />}
+    </NoraCtx.Provider>
+  )
+}
+
+function useCtx(): Ctx {
+  const c = useContext(NoraCtx)
+  if (!c) throw new Error('NORA hooks must be used inside <NoraProvider>')
+  return c
+}
+
+/** Engine plus its reactive state. */
+export function useNora(): { engine: NoraEngine; state: NoraState } {
+  const { engine } = useCtx()
+  const state = useSyncExternalStore(engine.subscribe, engine.getState)
+  return { engine, state }
+}
+export const useNoraPanel = (): { open: boolean; setOpen: (o: boolean) => void } => {
+  const { open, setOpen } = useCtx()
+  return { open, setOpen }
+}
+export const useNoraChat = (): Chat => useCtx().chat
+export const useReferral = (): Ctx['openReferral'] => useCtx().openReferral
+export const useResetDemo = (): Ctx['resetDemo'] => useCtx().resetDemo
+export const useNoraFix = (): Ctx['fix'] => useCtx().fix
+export const useNoraFocus = (): number => useCtx().focusTick
+export const useNoraProcessing = (): boolean => useCtx().processing
+export const useNoraStop = (): Ctx['stop'] => useCtx().stop
+export const useNoraGreet = (): Ctx['greet'] => useCtx().greet
