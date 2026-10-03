@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { setLatency } from '../persist'
-import { buildReportHtml, normalizeUrl, recommendedTag, verifyOutcome, websiteAnswer, websiteIssues, websiteActions, websiteParameters, websitePoints, websiteStore, WEBSITE_MAX, scanFromAudit } from '../website'
+import { buildReportHtml, normalizeUrl, recommendedTag, verifyOutcome, websiteAnswer, websiteIssues, websiteActions, websiteParameters, websitePoints, websiteStore, WEBSITE_MAX, scanFromAudit, SEED_URL } from '../website'
 
 const agent = { name: 'Agent Arjunan', title: 'Mortgage Loan Officer', city: 'Birmingham', phone: '+44 121 555 0142' }
 
@@ -106,5 +106,36 @@ describe('mapping a live audit onto the page', () => {
     expect(scan.nap.name).toEqual({ ok: true, value: 'Agent Arjunan' })
     expect(scan.nap.phone.ok).toBe(false)
     expect(scan.reviews).toEqual({ widget: false, schema: true, count: 12 })
+  })
+})
+
+describe('the app\'s own profile address', () => {
+  it('needs no verification, while another real host still does', () => {
+    expect(verifyOutcome(SEED_URL, false)).toBeNull()
+    expect(verifyOutcome('https://some-other-site.test/page', false)?.code).toBe('tag')
+  })
+})
+
+describe('a failed live scan', () => {
+  it('keeps the previous results and says why, instead of inventing a score', async () => {
+    websiteStore.set((s) => ({ ...s, url: 'https://real-site.test/profile/x', status: 'verified', tagInstalled: true, scan: s.scan }))
+    const before = websiteStore.get().scan
+    const real = globalThis.fetch
+    globalThis.fetch = (async () => new Response(JSON.stringify({ error: 'unreachable', message: 'The site answered with an error (404).' }), { status: 502 })) as typeof fetch
+    try { await websiteActions.scan() } finally { globalThis.fetch = real }
+    const s = websiteStore.get()
+    expect(s.scanFailed).toBe(true)
+    expect(s.scanNote).toMatch(/404/)
+    expect(s.scan).toEqual(before)
+  })
+  it('still shows labelled sample data when there is no server to ask', async () => {
+    websiteStore.set((s) => ({ ...s, url: 'https://another-site.test', status: 'verified', tagInstalled: true, scan: null, scanFailed: false }))
+    const real = globalThis.fetch
+    globalThis.fetch = (async () => { throw new TypeError('network down') }) as typeof fetch
+    try { await websiteActions.scan() } finally { globalThis.fetch = real }
+    const s = websiteStore.get()
+    expect(s.scanFailed).toBe(false)
+    expect(s.source).toBe('sample')
+    expect(s.scan).not.toBeNull()
   })
 })

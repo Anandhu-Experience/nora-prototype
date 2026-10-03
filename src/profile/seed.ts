@@ -1,4 +1,4 @@
-import type { ActivityItem, Agent, Award, Review, Service, ServiceIcon, StoreState } from './types'
+import type { ActivityItem, Agent, Award, Review, Service, ServiceIcon, StoreState } from './types.ts'
 
 const svc = (id: string, name: string, blurb: string, description: string, icon: ServiceIcon): Service => ({
   id, name, blurb, description, icon,

@@ -1,0 +1,9 @@
+{
+  "rewrites": [
+    { "source": "/profile/:id", "destination": "/api/profile?id=:id" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ],
+  "functions": {
+    "api/seo/audit.js": { "maxDuration": 60 }
+  }
+}

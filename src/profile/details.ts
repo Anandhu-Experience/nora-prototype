@@ -1,4 +1,4 @@
-import type { Address, Agent, BusinessHours, LockField, RankFormat } from './types'
+import type { Address, Agent, BusinessHours, LockField, RankFormat } from './types.ts'
 
 /* ---------------- addresses and amenities ---------------- */
 

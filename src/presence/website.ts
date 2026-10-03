@@ -59,9 +59,21 @@ export interface WebsiteState {
   scanNote?: string
   /** Lighthouse scores from PageSpeed Insights (live scans only). */
   lighthouse?: { seo: number | null; performance: number | null; issues: { id: string; title: string }[] } | null
+  /** The last scan could not reach the site (the previous results, if any, are kept). */
+  scanFailed?: boolean
 }
 
-export const SEED_URL = 'https://www.newamerican.example/arjunan'
+/**
+ * The agent's website is their public profile on the deployed app, so a live scan checks the real page.
+ *  - On the deployed app it is `<origin>/profile/arjunan`.
+ *  - On localhost, set `VITE_SITE_URL` in `.env.local` to the deployed address (for example https://your-app.vercel.app) to scan it from here.
+ *  - With neither, the old demo address stands in and the scan shows sample data.
+ */
+const origin = typeof window !== 'undefined' ? window.location.origin : ''
+const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {}
+const configured = env.MODE === 'test' ? '' : (env.VITE_SITE_URL ?? '').trim().replace(/\/+$/, '')
+const isLocal = (o: string) => /^https?:\/\/(localhost|127\.|\[::1\])/.test(o)
+export const SEED_URL = configured ? `${configured}/profile/arjunan` : origin && !isLocal(origin) ? `${origin}/profile/arjunan` : 'https://www.newamerican.example/arjunan'
 const f = (value: string): Field => ({ ok: true, value })
 const none: Field = { ok: false, value: '' }
 
@@ -82,8 +94,11 @@ const SEED_SCAN: Scan = {
   security: { ssl: true, expires: '2027-03-14', httpsRedirect: false },
 }
 
-const seed = (): WebsiteState => ({ url: SEED_URL, status: 'verified', failure: null, tagInstalled: true, scanning: false, scannedAt: '2026-09-30T09:12:00.000Z', scan: SEED_SCAN, fixes: [], tagValues: {} })
-export const websiteStore = createStore<WebsiteState>('nora-presence-website-v2', seed)
+/** The host of the agent's profile on this app (the deployed address, or VITE_SITE_URL on localhost). */
+const OWN_HOST = (() => { try { return new URL(SEED_URL).hostname.toLowerCase() } catch { return '' } })()
+
+const seed = (): WebsiteState => ({ url: SEED_URL, status: 'verified', failure: null, tagInstalled: true, scanning: false, scannedAt: '2026-09-30T09:12:00.000Z', scan: SEED_SCAN, fixes: [], tagValues: {}, source: 'sample', scanNote: 'These are sample results. Click Re-scan to check the live page.' })
+export const websiteStore = createStore<WebsiteState>(`nora-presence-website-v3:${new URL(SEED_URL).hostname}`, seed)
 
 /* ---------------- URL handling and the mock checks ---------------- */
 
@@ -113,6 +128,8 @@ export const verificationTag = (url: string): string => `<meta name="nora-site-v
 /** Mock verification: example/newamerican hosts pass, "blocked"/"down" hosts cannot be reached, others have no tag yet. */
 export function verifyOutcome(url: string, tagInstalled: boolean): Failure | null {
   const host = hostOf(url)
+  // this app's own public profile page needs no proof of ownership: it is the page the platform itself serves
+  if (host && host === OWN_HOST && !/example/.test(OWN_HOST)) return null
   if (!host) return { code: 'invalid', reason: 'That does not look like a website address.', fix: 'Enter an address like www.yourname.com.' }
   if (/blocked|down|offline/.test(host)) return { code: 'unreachable', reason: `We could not reach ${host}. The site did not answer (timeout).`, fix: 'Check that the site is online and not blocking our checker, then try again.' }
   if (/example|newamerican/.test(host) || tagInstalled) return null
@@ -228,7 +245,7 @@ interface AuditResponse {
 }
 
 /** The demo and unreachable-on-purpose addresses never go to the network. */
-const isDemoHost = (url: string): boolean => /example|newamerican|blocked|down|offline/.test(hostOf(url))
+const isDemoHost = (url: string): boolean => /(^|\.)example$|^example\.(com|org|net)$|blocked|offline/.test(hostOf(url))
 
 const REASON: Record<string, string> = {
   invalid_url: 'That address cannot be checked.', blocked_address: 'Private and local addresses cannot be checked.', unreachable: 'The site could not be reached.',
@@ -248,17 +265,18 @@ export function scanFromAudit(a: AuditResponse, agent?: Pick<Agent, 'name' | 'ph
   }
 }
 
-type LiveOutcome = { ok: true; scan: Scan; lighthouse: WebsiteState['lighthouse']; notes: string[] } | { ok: false; reason: string }
+/** `definitive`: the server answered and said why the scan cannot be done (as opposed to the server not being there at all). */
+type LiveOutcome = { ok: true; scan: Scan; lighthouse: WebsiteState['lighthouse']; notes: string[] } | { ok: false; reason: string; definitive: boolean }
 
 async function liveScan(url: string, agent?: Pick<Agent, 'name' | 'title' | 'city' | 'phone'>): Promise<LiveOutcome> {
-  if (isDemoHost(url)) return { ok: false, reason: 'This is a demo address, so sample data is shown. Enter a real public website to run a live scan.' }
+  if (isDemoHost(url)) return { ok: false, definitive: false, reason: 'This is a demo address, so sample data is shown. Enter a real public website to run a live scan.' }
   try {
     const res = await fetch('/api/seo/audit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, nap: { name: agent?.name, phone: agent?.phone, address: agent?.city } }), signal: AbortSignal.timeout(100_000) })
     const body = (await res.json()) as AuditResponse & { error?: string; message?: string }
-    if (!res.ok) return { ok: false, reason: body.message ?? REASON[body.error ?? ''] ?? 'The live scan is unavailable, so sample data is shown.' }
+    if (!res.ok) return { ok: false, definitive: !!body.error, reason: body.message ?? REASON[body.error ?? ''] ?? 'The live scan is unavailable, so sample data is shown.' }
     return { ok: true, scan: scanFromAudit(body, agent), lighthouse: body.lighthouse, notes: body.notes }
   } catch {
-    return { ok: false, reason: 'The live scan is unavailable here, so sample data is shown.' }
+    return { ok: false, definitive: false, reason: 'The live scan is unavailable here, so sample data is shown.' }
   }
 }
 
@@ -288,11 +306,16 @@ export const websiteActions = {
     const s = websiteStore.get()
     const live = await liveScan(s.url, agent)
     if (live.ok) {
-      patch({ scanning: false, scan: withFixes(live.scan, s), scannedAt: nowIso(), source: 'live', lighthouse: live.lighthouse, scanNote: live.notes.join(' ') })
+      patch({ scanning: false, scan: withFixes(live.scan, s), scannedAt: nowIso(), source: 'live', lighthouse: live.lighthouse, scanNote: live.notes.join(' '), scanFailed: false })
+      return
+    }
+    // The server reached the site and could not scan it (404, unreachable, blocked...): do not invent a score. Keep what was there and say why.
+    if (live.definitive) {
+      patch({ scanning: false, scanFailed: true, scanNote: live.reason })
       return
     }
     await wait(Math.round(latency * 2.5))
-    patch({ scanning: false, scan: withFixes(baseScan(s.url, agent), s), scannedAt: nowIso(), source: 'sample', lighthouse: null, scanNote: live.reason })
+    patch({ scanning: false, scan: withFixes(baseScan(s.url, agent), s), scannedAt: nowIso(), source: 'sample', lighthouse: null, scanNote: live.reason, scanFailed: false })
   },
   /** Apply a missing tag the owner approved (a draft or the recommended value). */
   applyTag(id: TagId, value: string): void {

@@ -69,7 +69,7 @@ export default function WebAnalyticsPage() {
         <Card><div className="flex items-center gap-3 text-sm text-slate-600" role="status"><Loader2 size={18} className="animate-spin text-blue-600" /> Scanning your site: checking NAP data, load time, HTML tags, reviews and security. A live scan can take up to 30 seconds…</div><div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full w-1/2 animate-pulse rounded-full bg-blue-500" /></div></Card>
       )}
 
-      {!verified && !state.scanning && <EmptyState>Verify your website to see your score and the issues to fix.</EmptyState>}
+      {!verified && !state.scanning && <EmptyState>{state.status === 'verified' && state.scanFailed ? `The scan could not be completed: ${state.scanNote}` : 'Verify your website to see your score and the issues to fix.'}</EmptyState>}
 
       {verified && (
         <div className={`space-y-5 transition-opacity ${state.scanning ? 'opacity-60' : ''}`} aria-busy={state.scanning}>
@@ -89,6 +89,7 @@ export default function WebAnalyticsPage() {
               </div>
             </div>
           </Card>
+          {state.scanFailed && <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900"><b>The last scan failed.</b> {state.scanNote} The results below are from the previous scan, not the current state of your site.</div>}
           {state.source && (
             <Card title="About this scan" right={<Pill tone={state.source === 'live' ? 'green' : 'amber'}>{state.source === 'live' ? 'Live scan' : 'Sample data'}</Pill>}>
               {state.source === 'sample' && <p className="text-sm text-slate-600">{state.scanNote || 'Sample results are shown instead of a live scan.'}</p>}

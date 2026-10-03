@@ -95,6 +95,15 @@ They run in the draft handler (`server/aiDraft.ts`, authoritative: a blocked req
 - **Fallback:** demo addresses (`newamerican.example` and similar), a missing endpoint or a failed scan show labelled **sample data** with the reason. A live scan is labelled **Live scan**. If PageSpeed fails, the rest still shows and Load Time says "Not measured".
 - **Still mock:** ownership verification (the tag check) is unchanged. Restart `npm run dev` after adding the key or pulling this change, because the server reads `vite.config.ts` and `.env.local` at startup.
 
+## Deploying on Vercel
+
+The two API endpoints are Vite dev-server middleware, so on Vercel they are separate serverless functions under `api/` (`api/seo/audit.js`, `api/profile.js`), bundled from `api-src/` and `server/` with `npm run build:api`. **Run `npm run build:api` after changing anything in `server/` or `api-src/`, and commit `api/`** (Vercel finds functions in the repo, not in build output).
+
+- **Environment variables** (Project → Settings → Environment Variables): `PAGESPEED_API_KEY` for the scan. `ANTHROPIC_API_KEY` is only needed if you also add the AI draft function (not added yet, so AI drafts show labelled templates on Vercel).
+- **`vercel.json`:** `/profile/:id` is rewritten to `api/profile.js`, which returns the app with a real `<title>`, description, canonical, Open Graph and Twitter tags, schema.org JSON-LD and the profile text already in the HTML (so crawlers that skip JavaScript can read it). Every other path falls back to `index.html`. The scan function may run up to 60 seconds.
+- **The agent's website** is now `<deployed origin>/profile/arjunan`, so **Web Analytics → Re-scan** checks the live page. On localhost it keeps the old demo address (sample data) unless you set `VITE_SITE_URL=https://your-app.vercel.app` in `.env.local` and restart `npm run dev`; then the local app scans the deployed page (the scan runs on your local server).
+- **Limits:** the profile HTML is built from the seeded demo data, so edits made in a visitor's browser are not in it. The endpoints are public and the rate limit is per function instance, so set a spend limit on any keys and consider adding authentication before sharing the URL widely.
+
 ## One profile, two views
 
 The profile has a single source of truth, the Profile page store (`src/profile/store.ts`). NORA's `getProfile/updateProfile` read and write it (via `mock/database.ts`). After *Approve & Apply* the page shows the new data, an Activity entry ("NORA updated your specialties") and a bell notification. Listings, analytics, connections and VOCE are NORA-local mock data.
