@@ -1,4 +1,4 @@
-import { ArrowRight, Sparkles, Target, TrendingUp, Trophy } from 'lucide-react'
+import { ArrowRight, BarChart3, Sparkles, Target, TrendingUp, Trophy } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { authorityScore, voceStore } from '../../presence/voce'
@@ -9,7 +9,7 @@ import { ratingStats } from '../selectors'
 import { useStore } from '../store'
 import { Avatar, Stars } from '../ui/bits'
 import { AiInsightBar, Hero, LineChart, Pill, Ring, ScoreBar, type Suggestion } from '../ui/kit'
-import { BTN_PRIMARY, Modal } from '../ui/Modal'
+import { BTN_GHOST, BTN_PRIMARY, Modal } from '../ui/Modal'
 import { Card, PageHeader } from '../ui/PageBits'
 import { ScrollFade } from '../ui/ScrollFade'
 import { nextActions, type NextAction } from '../ui/srs/nextActions'
@@ -81,7 +81,7 @@ export default function SearchRankPage() {
 
   return (
     <div className="mx-auto max-w-[1100px] space-y-5">
-      <PageHeader icon={TrendingUp} title="Search Rank Score" subtitle="One number for the strength of your whole online presence, and how you compare nearby." />
+      <PageHeader icon={TrendingUp} title="Search Rank Score" subtitle="One number for the strength of your whole online presence, and how you compare nearby." right={<Link to="/search-rank/how-it-works" className={BTN_GHOST}><BarChart3 size={15} /> View SRS graph</Link>} />
       <AiInsightBar summary={summary} suggestions={suggestions} question="How do I get to #1 in my area?" answer={srsAnswer(agent)} />
 
       <Hero title="Search Rank Score Progress Tracker" blurb="Your ranking among top agents in your location, your score and the points to the top.">

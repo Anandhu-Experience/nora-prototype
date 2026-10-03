@@ -96,7 +96,7 @@ export function TraceButton() {
     <button onClick={() => (s.open ? traceStore.close() : traceStore.open())} aria-pressed={s.open} aria-label="Flow trace" title="See the steps from input to the model"
       className={`relative inline-flex h-10 items-center gap-2 rounded-lg border px-3 text-sm font-medium ${s.open ? 'border-slate-400 bg-slate-100 text-slate-900' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}>
       {running ? <Loader2 size={16} className="animate-spin" /> : <Workflow size={16} />}
-      <span className="hidden lg:inline">Flow</span>
+      <span className="hidden xl:inline">Flow</span>
       {s.traces.length > 0 && <span className="rounded-full bg-slate-200 px-1.5 text-[11px] font-semibold text-slate-700">{s.traces.length}</span>}
     </button>
   )

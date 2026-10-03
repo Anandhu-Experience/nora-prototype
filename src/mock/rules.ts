@@ -11,7 +11,7 @@ export const MEANINGFUL_TREND_PCT = 20
 export type ProfileField = 'photoUrl' | 'headline' | 'phone' | 'location' | 'bio' | 'specialties'
 
 /** Weight of each field toward completeness (sums to 100 with `name`). */
-const PROFILE_WEIGHTS: Record<ProfileField | 'name', number> = {
+export const PROFILE_WEIGHTS: Record<ProfileField | 'name', number> = {
   name: 14,
   photoUrl: 14,
   headline: 14,

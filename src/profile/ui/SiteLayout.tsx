@@ -266,7 +266,7 @@ function TopBar() {
         <button aria-label="Menu" onClick={() => setDrawer(true)} className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 lg:hidden"><Menu size={20} /></button>
         <Link to="/profile" className="flex items-center gap-2 lg:hidden"><Logo size={26} /></Link>
         <div className="ml-auto flex items-center gap-2 sm:gap-3">
-          <div className="hidden w-[280px] md:block"><SearchBox /></div>
+          <div className="hidden w-[190px] md:block xl:w-[280px]"><SearchBox /></div>
           <button onClick={() => setOpen(!open)} aria-pressed={open} aria-label="Ask NORA" className={`relative inline-flex h-10 items-center gap-2 rounded-lg border px-3.5 text-sm font-semibold ${open ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-blue-600 bg-white text-blue-700 hover:bg-blue-50'}`}>
             {processing ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
             <span className="hidden sm:inline">Ask NORA</span>
