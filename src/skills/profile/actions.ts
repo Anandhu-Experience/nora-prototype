@@ -2,6 +2,8 @@ import * as api from '../../mock/api'
 import { completenessAfter, missingProfileFields, MIN_SPECIALTIES } from '../../mock/rules'
 import type { Profile } from '../../mock/types'
 import { AI_TASKS, type BioInput } from '../../profile/aiTasks'
+import { isLocked } from '../../profile/details'
+import { getState } from '../../profile/store'
 import { defineSkill, type Draft, type Finding } from '../types'
 import doc from './SKILL.md?raw'
 
@@ -11,8 +13,14 @@ type Draftable = (typeof DRAFTABLE)[number]
 
 const LABEL: Record<Draftable, string> = { bio: 'Bio', specialties: 'Specialties' }
 
-const draftableMissing = (missing: string[]): Draftable[] =>
-  DRAFTABLE.filter((f) => missing.includes(f))
+const LOCK_OF = { bio: 'about', specialties: 'specialties' } as const
+
+/** What NORA may draft: missing, and not locked by a manager (NORA can't change a locked field either). */
+const draftableMissing = (missing: string[]): Draftable[] => {
+  const s = getState()
+  const me = s.agents[s.viewerId]!
+  return DRAFTABLE.filter((f) => missing.includes(f) && !isLocked(me, LOCK_OF[f]))
+}
 
 /** What the skill reads: the profile NORA's rules see, plus the facts a bio may use. */
 interface ProfileRead {

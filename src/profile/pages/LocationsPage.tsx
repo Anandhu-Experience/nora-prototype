@@ -6,7 +6,7 @@ import { Avatar } from '../ui/bits'
 import { KpiCell, KpiGrid, PageHeader } from '../ui/PageBits'
 import { ScrollFade } from '../ui/ScrollFade'
 
-export default function LocationsPage() {
+export function LocationsView({ cityHref = (c: string) => `/professionals?city=${encodeURIComponent(c)}` }: { cityHref?: (city: string) => string } = {}) {
   const state = useStore()
   const agents = state.order.map((id) => state.agents[id]!)
   const rows = cities(state).map((city) => {
@@ -16,9 +16,7 @@ export default function LocationsPage() {
   const overall = agents.reduce((n, a) => n + ratingStats(a.reviews).avg, 0) / (agents.length || 1)
 
   return (
-    <div className="mx-auto max-w-[1100px] space-y-5">
-      <PageHeader icon={MapPin} title="Locations" subtitle="Browse professionals by city." />
-
+    <div className="space-y-5">
       {/* Phones: one swipeable row with edge fades. From sm up it is the usual grid and nothing scrolls. */}
       <ScrollFade axis="x" tone="page" className="-mb-3 -mt-1 pb-3 pt-1" innerClassName="sm:min-w-0">
       <KpiGrid slider>
@@ -37,7 +35,7 @@ export default function LocationsPage() {
       >
         {rows.map(({ city, here, avg, loans }) => (
           <div key={city} role="listitem" className="w-[272px] shrink-0 sm:w-auto">
-            <Link to={`/professionals?city=${encodeURIComponent(city)}`} className="group flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-card transition hover:border-blue-300">
+            <Link to={cityHref(city)} className="group flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-card transition hover:border-blue-300">
               <div className="flex items-center justify-between">
                 <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><MapPin size={20} /></span>
                 <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">{here.length} professional{here.length === 1 ? '' : 's'}</span>
@@ -55,6 +53,15 @@ export default function LocationsPage() {
           </div>
         ))}
       </ScrollFade>
+    </div>
+  )
+}
+
+export default function LocationsPage() {
+  return (
+    <div className="mx-auto max-w-[1100px] space-y-5">
+      <PageHeader icon={MapPin} title="Locations" subtitle="Browse professionals by city." />
+      <LocationsView />
     </div>
   )
 }

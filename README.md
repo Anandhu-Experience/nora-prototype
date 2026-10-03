@@ -12,19 +12,19 @@ npm test         # engine, skills, mock layer, profile store, auth
 
 ## Look and feel
 
-Left icon rail (collapsible), a top bar with Back, breadcrumb, `⌘K` search, Reset demo, a light/dark switch and notifications. Cards, KPI grid, peach NORA summary banner and icon tabs follow the reference dashboard.
+A labelled left sidebar of the product modules (a drawer on phones) and a top bar with `⌘K` search, **Ask NORA**, Reset demo, a light/dark switch, notifications and the account menu. Messages and Notifications are in the top bar and account menu, not the sidebar.
 
-**Theme:** every colour is a CSS variable (`tailwind.config.js`), so dark mode is a variable remap, not per-component `dark:` classes. Neutrals invert; accent tints and deep shades swap; mid shades (buttons, icons) stay put. The choice is saved in `localStorage` (`nora-theme`). Tailwind reads its config at startup, so **restart `npm run dev` after editing `tailwind.config.js`**.
+**Theme:** every colour is a CSS variable (`tailwind.config.js`), so dark mode is a variable remap, not per-component `dark:` classes. The choice is saved in `localStorage` (`nora-theme`). Restart `npm run dev` after editing `tailwind.config.js`.
 
 ## NORA
 
-NORA greets you **in the centre of the screen about 5 seconds after you log in** (once per browser session; `GREET_DELAY_MS` in `NoraContext.tsx`). Until then it sits as the small launcher pill; opening or minimizing it yourself first cancels the greeting. *Reset demo* brings it up immediately.
+NORA greets you **in the centre of the screen about 5 seconds after you log in** (once per browser session; `GREET_DELAY_MS` in `NoraContext.tsx`). Until then the top bar's **Ask NORA** button opens it any time; opening or minimizing it yourself first cancels the greeting. *Reset demo* brings it up immediately.
 
 NORA also appears after the same wait when you **switch to a different person's profile** (it is about to be asked about them, and the greeting says whose profile you are viewing). Opening or minimizing it yourself first cancels that, a second switch restarts the wait, and ordinary page navigation does nothing. It is chat-first:
 
 - **Hello {name}**, then **what NORA found**: one numbered action card per applicable skill, in ranked order, each with tags, the expected outcome (e.g. profile completeness 85% → 100%) and *View Analysis* / *Review with NORA*.
 - **⚡ quick actions** and a **message box** are hidden behind footer icons; below them a self-advancing slider of tool chips (pauses on hover, drag or swipe, and with reduced motion).
-- **Minimize** (—), Esc or a click outside collapses NORA into a floating launcher pill that shows *Working…* or a dot when it needs you. The launcher brings it back.
+- **Minimize** (—), Esc or a click outside minimizes NORA. The top bar's **Ask NORA** button shows a spinner while it works and a red dot when it needs you, and brings it back.
 - **Stop** appears while NORA is reading, validating or drafting. It discards the run, changes nothing and brings the proposal back. It is not offered once NORA is writing.
 - **Focus mode:** while NORA works, the rest of the app dims and blurs and NORA glows.
 - **Fix with NORA** links (Insights, the profile summary banner, the completeness figure) bring NORA up, select the matching action, start it, and narrate in the chat: *On it…*, *The draft is ready…*, *Done. …* or *Stopped.*
@@ -55,6 +55,27 @@ Reject at either approval and nothing is written. If the profile is edited on th
 - VOCE (explore) has the lowest priority, so it only surfaces when nothing is actionable.
 - A skill the user rejected or completed is not proposed again until the data changes.
 
+## Product modules (from the v3 plan)
+
+Besides Profile, the sidebar has the plan's other modules, each a page with mock data, working actions and an **NORA suggests** strip (a one-line read of the page, up to three actions that disappear once done, and *Ask NORA*):
+
+| Page | What it does |
+|---|---|
+| **Listings** `/listings` | Business info (validated edit, manager-lock demo), data issues with *Fix with AI* (review then apply), 14 publish sites with async publish/retry, analytics + CSV report. Google needs the Google connection. The retired Q&A tab is replaced by a note. |
+| **Connections** `/connections` | 11 networks with a mock OAuth consent or profile-URL flow, points per network (Google is worth most), sync, disconnect. |
+| **Web Analytics** `/analytics` | Website audit out of 250: URL verification with a one-click fix path, NAP, load time, 8 meta tags, on-page reviews, SSL. *Draft with AI* for the meta description, printable report. |
+| **Search Rank Score** `/search-rank` | The 850 score, its drivers, a peer leaderboard, ranked next actions and a 12-week history. |
+| **Insights** `/insights` | Profile, Traffic, Review Sources, Google Analytics and Reports tabs with a shared date range. Google-sourced charts unlock when Google is connected and the score is 400+. Review requests, real CSV/print/XLS export. |
+| **AI Visibility** `/ai-visibility` | AI Authority Score /100, a writing studio (articles drafted by AI, with approval, credits, schedule/publish), FAQs with AI answers, content analytics and a simulated AI-answer presence panel. |
+| **Network** `/network` | Partners (promote up to 8, promo code, requests), Referrals table (received, requested, given, follow-ups), and the professionals directory. Promoted partners show on your public profile. **Messages** gained Inbox / Starred / Archived and AI-drafted replies. |
+
+**One score, many modules.** The Search Rank Score is the sum of five drivers: Profile 100, Web Analytics 250, Reviews 300, Listings 100, Connections 100 (`src/presence/srs.ts`). The Overview card, the Search Rank page and NORA all read it, so connecting Google or fixing a meta tag moves every one of them. Leaderboard peers are fixed demo data.
+
+**Data layer:** each module owns a persisted store in `src/presence/` (`createStore`, localStorage keys `nora-presence-*`), and *Reset demo* restores them all. Page-aware NORA: ask about the score, listings, connections, website, AI visibility, partners or traffic and it answers from live data, with quick actions for the page you are on (`src/profile/assistant.ts`).
+
+**More AI drafts** (same safeguards as above: server-side prompt, Haiku 4.5, labelled template fallback, nothing saved until you approve): website meta description, AI-visibility article, FAQ answer.
+
+
 ## One profile, two views
 
 The profile has a single source of truth, the Profile page store (`src/profile/store.ts`). NORA's `getProfile/updateProfile` read and write it (via `mock/database.ts`). After *Approve & Apply* the page shows the new data, an Activity entry ("NORA updated your specialties") and a bell notification. Listings, analytics, connections and VOCE are NORA-local mock data.
@@ -73,8 +94,19 @@ Account menu (avatar, top right) → **NORA demo scenario**:
 
 ## Profile page
 
-Routes: `/profile/:id` (default `arjunan`, the owner), `/professionals`, `/locations`, `/messages`, `/insights`.
+Routes: **`/profile` is the Profile Overview** (the owner's dashboard), `/profile/:id` is the public profile (default `arjunan`, the owner), `/professionals` (Network), `/locations`, `/messages`, `/notifications`, `/insights`.
 
+### Profile Overview (`/profile`)
+
+- **Hero:** photo (change it from the camera button), PRO badge, bio with *Show more*, specialty chips with *+N*, and the **Published** status with *Unpublish / Publish now* (an unpublished profile shows a notice on its public page).
+- **KPI cards:** profile completeness (the same rules NORA uses), total rating from your reviews, profile views and search rank score. The rank score is computed from completeness and reviews, so improving the profile moves it. The 30-day views and the percentage trends are mock figures.
+- **Recommended Actions** are derived from your real data (photo, specialties, cover, service areas, awards, bio), each stops applying once you fix it, and each button does something: *Fix with NORA* runs NORA's profile skill; the others open Edit Profile at the right section (Photos, Location with service areas, Awards, About) or the cover picker.
+- **NORA AI Assistant card** shows the top three actions with the same buttons, NORA's pending proposal if there is one, and an input that sends your question to NORA.
+- **Reviews & Ratings** with the distribution and the Google / Facebook / Experience.com split, and a **Recent Reviews** carousel.
+
+- **Locations and hours:** Edit Profile has *Location* (several addresses, one primary, 8 amenities) and *Hours* (per day, time zone). The Contact tab shows a demo map per address, the amenities, and the week with an *Open now* badge. The map is drawn, not live tiles.
+- **Manager locks:** fields a manager locked (seed: NMLS, company) are read-only in Edit Profile. *Manager view (demo)* lets a manager lock or unlock fields and edit locked ones. The store, NORA and Recommended Actions respect the locks.
+- **Rank page and schema** (`/rank/:id`, Overview ⋮ menu): three shareable formats (card, banner, review-led) with copy link and embed code, a schema.org checklist, and the JSON-LD that is also added to the public profile (`src/profile/details.ts`).
 - **Header:** search (agents / cities / services), notifications, account menu.
 - **Profile:** Change cover, Edit Profile (6 sections, validation, uploads), Request Referral, Share, ⋮ (contact card, print, report).
 - **Computed from reviews:** rating, Top Rated badge, satisfaction, NORA Insights. Posting a review changes them.
@@ -82,7 +114,7 @@ Routes: `/profile/:id` (default `arjunan`, the owner), `/professionals`, `/locat
 - **Messages:** conversation list with search, thread header linking to the profile, and a composer. Referral requests create a thread; the agent auto-replies after ~4.5s with a notification.
 - **Professionals / Locations / Insights:** KPI strips, filter chips, city cards, a profile-views chart with hover tooltips, a completeness gauge and recent activity, all in the same card style.
 
-State persists to `localStorage` (`nora-profile-demo-v2`).
+State persists to `localStorage` (`nora-profile-demo-v3`; the key changed when service areas, awards editing and review sources were added, so older saved data is ignored).
 
 ## Mock-data notes
 

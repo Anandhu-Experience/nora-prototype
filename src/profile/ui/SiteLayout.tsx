@@ -1,6 +1,6 @@
-import { Bell, ChevronLeft, ChevronsLeft, ChevronsRight, Home, Loader2, MapPin, Menu, MessageSquare, Moon, RotateCcw, Search, Sparkles, Sun, BarChart3, Users, Wrench } from 'lucide-react'
+import { Bell, Building2, ChevronDown, Loader2, MapPin, Menu, Moon, Network, RotateCcw, Search, Sparkles, Sun, BarChart3, TrendingUp, Activity, User, Users, Wrench, X, Bot, type LucideIcon } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { SCENARIOS, SCENARIO_IDS } from '../../mock/user'
 import { NoraProvider, useNora, useNoraPanel, useNoraProcessing, useResetDemo } from '../NoraContext'
 import { allServices, cities, fmtDate } from '../selectors'
@@ -12,11 +12,27 @@ import { Logo } from './Logo'
 import { NoraPanel } from './NoraPanel'
 import { ToastProvider, useToast } from './Toast'
 
-const NAV = [
-  { to: '/profile', label: 'Home', icon: Home }, { to: '/professionals', label: 'Professionals', icon: Users },
-  { to: '/locations', label: 'Locations', icon: MapPin }, { to: '/insights', label: 'Insights', icon: BarChart3 },
-  { to: '/messages', label: 'Messages', icon: MessageSquare },
+interface NavItem {
+  to: string
+  label: string
+  icon: LucideIcon
+  badge?: 'messages' | 'notifications'
+  /** Extra paths that count as this item being active. */
+  also?: string[]
+}
+
+/** The sidebar: the product's modules. Messages and notifications live in the top bar and account menu. */
+const NAV_MAIN: NavItem[] = [
+  { to: '/profile', label: 'Profile & Presence', icon: User },
+  { to: '/listings', label: 'Listings', icon: Building2 },
+  { to: '/connections', label: 'Connections', icon: Users },
+  { to: '/analytics', label: 'Web Analytics', icon: Activity },
+  { to: '/search-rank', label: 'Search Rank Score', icon: TrendingUp },
+  { to: '/insights', label: 'Insights', icon: BarChart3 },
+  { to: '/ai-visibility', label: 'AI Visibility', icon: Bot },
+  { to: '/network', label: 'Network', icon: Network, also: ['/professionals', '/locations'] },
 ]
+const isActive = (item: NavItem, path: string) => [item.to, ...(item.also ?? [])].some((t) => path === t || path.startsWith(`${t}/`))
 
 type Hit = { key: string; kind: 'agent' | 'city' | 'service'; label: string; sub: string; to: string }
 
@@ -127,7 +143,7 @@ function BellMenu() {
   )
 }
 
-function AccountMenu({ position }: { position: string }) {
+function AccountMenu({ position, variant = 'avatar' }: { position: string; variant?: 'avatar' | 'card' }) {
   const state = useStore()
   const { engine, state: nora } = useNora()
   const nav = useNavigate()
@@ -138,11 +154,20 @@ function AccountMenu({ position }: { position: string }) {
   const go = (to: string) => { setOpen(false); nav(to) }
   return (
     <div className="relative">
-      <button aria-label="Account menu" aria-expanded={open} onClick={() => setOpen(!open)} className="flex rounded-full ring-2 ring-transparent hover:ring-blue-200"><Avatar agent={me} size={38} /></button>
+      {variant === 'card' ? (
+        <button aria-label="Account menu" aria-expanded={open} onClick={() => setOpen(!open)} className="flex w-full items-center gap-3 rounded-xl p-2 text-left hover:bg-slate-50">
+          <Avatar agent={me} size={40} />
+          <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-slate-900">{me.name}</span><span className="block truncate text-xs text-slate-500">{me.title}</span></span>
+          <ChevronDown size={16} className="shrink-0 text-slate-400" />
+        </button>
+      ) : (
+        <button aria-label="Account menu" aria-expanded={open} onClick={() => setOpen(!open)} className="flex items-center gap-1 rounded-full p-0.5 hover:bg-slate-100"><Avatar agent={me} size={38} /><ChevronDown size={14} className="mr-1 text-slate-400" /></button>
+      )}
       <Popover open={open} onClose={() => setOpen(false)} width="w-64" position={position}>
         <div className="border-b border-slate-100 px-3.5 pb-2 pt-1"><div className="text-sm font-semibold text-slate-900">{me.name}</div><div className="text-xs text-slate-500">{me.title}</div></div>
-        <button className={MENU_ITEM} onClick={() => go(`/profile/${me.id}`)}>My profile</button>
-        <button className={MENU_ITEM} onClick={() => go(`/profile/${me.id}?edit=1`)}>Edit profile</button>
+        <button className={MENU_ITEM} onClick={() => go('/profile')}>Profile overview</button>
+        <button className={MENU_ITEM} onClick={() => go(`/profile/${me.id}`)}>View public profile</button>
+        <button className={MENU_ITEM} onClick={() => go('/profile?edit=1')}>Edit profile</button>
         <button className={MENU_ITEM} onClick={() => go('/messages')}>Messages</button>
         <button className={MENU_ITEM} onClick={() => go('/insights')}>Insights</button>
         <div className="my-1 border-t border-slate-100" />
@@ -161,44 +186,36 @@ function AccountMenu({ position }: { position: string }) {
   )
 }
 
-function Rail() {
+function SidebarItem({ item, onNavigate }: { item: NavItem; onNavigate?: () => void }) {
+  const { pathname } = useLocation()
   const state = useStore()
-  const [expanded, setExpanded] = useState(() => { try { return localStorage.getItem('nora-rail') === '1' } catch { return false } })
-  const unread = unreadMessages(state)
-  const toggle = () => {
-    setExpanded((e) => {
-      try { localStorage.setItem('nora-rail', e ? '0' : '1') } catch { /* ignore */ }
-      return !e
-    })
-  }
+  const active = isActive(item, pathname)
+  const count = item.badge === 'messages' ? unreadMessages(state) : item.badge === 'notifications' ? unreadNotifications(state).length : 0
+  const Icon = item.icon
   return (
-    <aside className={`sticky top-0 hidden h-screen shrink-0 flex-col border-r border-slate-200 bg-white py-4 transition-[width] md:flex ${expanded ? 'w-56' : 'w-[76px]'}`}>
-      <div className={`flex items-center ${expanded ? 'justify-between px-4' : 'flex-col gap-3'}`}>
-        <div className="flex items-center gap-2"><Logo />{expanded && <span className="text-lg font-extrabold tracking-tight text-slate-900">experience</span>}</div>
-        <button onClick={toggle} aria-label={expanded ? 'Collapse sidebar' : 'Expand sidebar'} className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50">
-          {expanded ? <ChevronsLeft size={15} /> : <ChevronsRight size={15} />}
-        </button>
-      </div>
-      <nav className="mt-8 flex flex-1 flex-col gap-2 px-3" aria-label="Main">
-        {NAV.map(({ to, label, icon: Icon }) => (
-          <NavLink key={to} to={to} title={label} className={({ isActive }) => `relative flex h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium ${isActive ? 'bg-blue-50 text-blue-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}>
-            <Icon size={20} className="shrink-0" />
-            {expanded && <span>{label}</span>}
-            {to === '/messages' && unread > 0 && <span className={`flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] font-bold text-white ${expanded ? 'ml-auto' : 'absolute right-1.5 top-1.5'}`}>{unread}</span>}
-          </NavLink>
-        ))}
-      </nav>
-      <div className={`flex ${expanded ? 'px-4' : 'justify-center'}`}><AccountMenu position="bottom-0 left-full ml-3" /></div>
-    </aside>
+    <Link to={item.to} onClick={onNavigate} aria-current={active ? 'page' : undefined} className={`flex h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium ${active ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
+      <Icon size={20} className="shrink-0" />
+      <span className="flex-1 truncate">{item.label}</span>
+      {count > 0 && <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1.5 text-[11px] font-bold text-white" aria-label={`${count} unread`}>{count}</span>}
+    </Link>
   )
 }
 
-function useTitle(): string {
-  const { pathname } = useLocation()
-  const state = useStore()
-  const m = pathname.match(/^\/profile\/([^/]+)/)
-  if (m) return state.agents[m[1]!]?.name ?? 'Profile'
-  return NAV.find((n) => pathname.startsWith(n.to))?.label ?? 'Home'
+/** Logo, account card and the navigation. Shared by the desktop sidebar and the mobile drawer. */
+function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+  return (
+    <div className="flex h-full flex-col px-3 py-5">
+      <Link to="/profile" onClick={onNavigate} className="mb-5 flex items-center gap-2 px-2.5"><Logo size={30} /><span className="text-xl font-extrabold tracking-tight text-slate-900">Experience<span className="text-blue-600">.com</span></span></Link>
+      <AccountMenu variant="card" position="left-0 top-full mt-2" />
+      <nav className="mt-4 flex flex-1 flex-col gap-0.5 overflow-y-auto" aria-label="Main">
+        {NAV_MAIN.map((it) => <SidebarItem key={it.to} item={it} onNavigate={onNavigate} />)}
+      </nav>
+    </div>
+  )
+}
+
+function Sidebar() {
+  return <aside className="sticky top-0 hidden h-screen w-64 shrink-0 border-r border-slate-200 bg-white lg:block"><SidebarContent /></aside>
 }
 
 /** Visible, presenter-friendly reset. Confirms first because it discards local edits. */
@@ -237,29 +254,39 @@ function ThemeToggle() {
 }
 
 function TopBar() {
-  const nav = useNavigate()
-  const title = useTitle()
-  const [menu, setMenu] = useState(false)
+  const { open, setOpen } = useNoraPanel()
+  const { state: nora } = useNora()
+  const processing = useNoraProcessing()
+  const [drawer, setDrawer] = useState(false)
+  const needsYou = nora.status === 'SKILL_PROPOSED' || nora.status === 'WRITE_APPROVAL' || nora.status === 'RESULT_READY'
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
-      <div className="flex h-[68px] items-center gap-3 px-4 md:px-6">
-        <button aria-label="Menu" onClick={() => setMenu(!menu)} className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 md:hidden"><Menu size={20} /></button>
-        <button onClick={() => nav(-1)} className="inline-flex items-center gap-1 rounded-lg px-1.5 py-1 text-sm font-medium text-slate-600 hover:text-slate-900"><ChevronLeft size={18} /><span className="hidden sm:inline">Back</span></button>
-        <div className="hidden min-w-0 items-center gap-2 text-sm sm:flex"><Users size={16} className="text-slate-500" /><span className="text-slate-300">/</span><span className="truncate font-semibold text-slate-900">{title}</span></div>
-        <div className="ml-auto hidden w-full max-w-[380px] md:block"><SearchBox /></div>
-        <div className="ml-auto flex items-center gap-2 md:ml-0">
+      <div className="flex h-16 items-center gap-2 px-4 md:px-6">
+        <button aria-label="Menu" onClick={() => setDrawer(true)} className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 lg:hidden"><Menu size={20} /></button>
+        <Link to="/profile" className="flex items-center gap-2 lg:hidden"><Logo size={26} /></Link>
+        <div className="ml-auto flex items-center gap-2 sm:gap-3">
+          <div className="hidden w-[280px] md:block"><SearchBox /></div>
+          <button onClick={() => setOpen(!open)} aria-pressed={open} aria-label="Ask NORA" className={`relative inline-flex h-10 items-center gap-2 rounded-lg border px-3.5 text-sm font-semibold ${open ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-blue-600 bg-white text-blue-700 hover:bg-blue-50'}`}>
+            {processing ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+            <span className="hidden sm:inline">Ask NORA</span>
+            {needsYou && !open && <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-white" aria-label="Needs your attention" />}
+          </button>
           <ResetDemo />
           <div className="hidden sm:block"><ThemeToggle /></div>
           <BellMenu />
-          <div className="md:hidden"><AccountMenu position="top-full mt-2 right-0" /></div>
+          <AccountMenu position="top-full mt-2 right-0" />
         </div>
       </div>
       <div className="px-4 pb-3 md:hidden"><SearchBox /></div>
-      {menu && (
-        <nav className="border-t border-slate-100 px-4 py-2 md:hidden" aria-label="Mobile">
-          {NAV.map(({ to, label }) => <NavLink key={to} to={to} onClick={() => setMenu(false)} className={({ isActive }) => `block rounded-md px-3 py-2 text-sm font-medium ${isActive ? 'bg-blue-50 text-blue-700' : 'text-slate-700'}`}>{label}</NavLink>)}
-          <div className="py-2 sm:hidden"><ThemeToggle /></div>
-        </nav>
+      {drawer && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setDrawer(false)} />
+          <div className="absolute inset-y-0 left-0 w-72 max-w-[85vw] bg-white shadow-xl">
+            <button aria-label="Close menu" onClick={() => setDrawer(false)} className="absolute right-2 top-2 rounded-lg p-2 text-slate-500 hover:bg-slate-100"><X size={18} /></button>
+            <SidebarContent onNavigate={() => setDrawer(false)} />
+            <div className="absolute bottom-3 right-3 sm:hidden"><ThemeToggle /></div>
+          </div>
+        </div>
       )}
     </header>
   )
@@ -310,36 +337,16 @@ function NoraDialog() {
   )
 }
 
-/** Minimized NORA: a floating pill that shows whether it is working or needs you. */
-function NoraLauncher() {
-  const { setOpen } = useNoraPanel()
-  const { state } = useNora()
-  const processing = useNoraProcessing()
-  const needsYou = state.status === 'SKILL_PROPOSED' || state.status === 'WRITE_APPROVAL' || state.status === 'RESULT_READY'
-  return (
-    <button
-      onClick={() => setOpen(true)} aria-label="Open NORA"
-      className={`fixed bottom-5 right-5 z-40 inline-flex items-center gap-2 rounded-full border border-pink-200 bg-white py-2 pl-2 pr-4 text-sm font-semibold text-slate-900 shadow-[0_8px_30px_rgba(168,85,247,0.35)] hover:brightness-105 ${processing ? 'nora-glow' : ''}`}
-    >
-      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-pink-400 to-purple-500 text-white">
-        {processing ? <Loader2 size={17} className="animate-spin" /> : <Sparkles size={17} />}
-      </span>
-      NORA
-      {processing ? <span className="text-xs font-medium text-purple-600">Working…</span> : needsYou ? <span className="h-2.5 w-2.5 rounded-full bg-rose-500" aria-label="Needs your attention" /> : null}
-    </button>
-  )
-}
-
 function Shell() {
   const { open } = useNoraPanel()
   return (
     <div className="flex min-h-screen bg-slate-100">
-      <Rail />
+      <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar />
         <main className="min-w-0 flex-1 p-4 md:p-6"><Outlet /></main>
       </div>
-      {open ? <NoraDialog /> : <NoraLauncher />}
+      {open && <NoraDialog />}
       <NotificationToaster />
     </div>
   )

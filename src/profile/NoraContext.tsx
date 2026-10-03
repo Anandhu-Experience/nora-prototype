@@ -6,6 +6,7 @@ import { NoraEngine } from '../nora/noraEngine'
 import type { NoraState, NoraStatus } from '../nora/noraMachine'
 import { getSkill } from '../nora/skillRegistry'
 import { answer, type AiAnswer } from './assistant'
+import { resetPresence } from '../presence/persist'
 import { actions as profileActions, getState as getProfileState, subscribe as subscribeProfile, useStore } from './store'
 import type { Agent } from './types'
 import { ReferralModal } from './ui/ReferralModal'
@@ -19,6 +20,8 @@ interface Chat {
   turns: ChatTurn[]
   pending: boolean
   ask: (question: string) => void
+  /** Post a question with a ready-made answer (pages use this for "Ask NORA about this"). */
+  askWith: (question: string, answer: AiAnswer) => void
   clear: () => void
 }
 
@@ -148,6 +151,16 @@ export function NoraProvider({ children }: { children: ReactNode }) {
     },
     [agentId],
   )
+  const askWith = useCallback((question: string, ready: AiAnswer) => {
+    setOpen(true)
+    setTurns((t) => [...t, { id: ++seq.current, role: 'user', text: question }])
+    setPending(true)
+    clearTimeout(timer.current)
+    timer.current = setTimeout(() => {
+      setTurns((t) => [...t, { id: ++seq.current, role: 'ai', answer: ready }])
+      setPending(false)
+    }, 600)
+  }, [])
   const clear = useCallback(() => {
     clearTimeout(timer.current)
     setTurns([])
@@ -208,13 +221,14 @@ export function NoraProvider({ children }: { children: ReactNode }) {
   const greet = useCallback(() => setOpen(true), [])
   const resetDemo = useCallback(() => {
     profileActions.reset()
+    resetPresence()
     clear()
     fixing.current = false
     void engine.reset(DEFAULT_SCENARIO)
     setOpen(true) // a reset is a fresh start: NORA greets again
   }, [engine, clear])
   const openReferral = useCallback((id: string, text?: string) => setReferral({ agentId: id, text }), [])
-  const chat = useMemo<Chat>(() => ({ agent, turns, pending, ask, clear }), [agent, turns, pending, ask, clear])
+  const chat = useMemo<Chat>(() => ({ agent, turns, pending, ask, askWith, clear }), [agent, turns, pending, ask, askWith, clear])
   const value = useMemo<Ctx>(
     () => ({ engine, open, setOpen, chat, openReferral, resetDemo, fix, focusTick, processing, stop, greet }),
     [engine, open, chat, openReferral, resetDemo, fix, focusTick, processing, stop, greet],

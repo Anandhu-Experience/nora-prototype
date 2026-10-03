@@ -11,7 +11,7 @@ import { ScrollFade } from '../ui/ScrollFade'
 
 type Sort = 'rating' | 'reviews' | 'experience'
 
-export default function DirectoryPage() {
+export function DirectoryView() {
   const state = useStore()
   const openReferral = useReferral()
   const [params, setParams] = useSearchParams()
@@ -35,9 +35,7 @@ export default function DirectoryPage() {
   const filters = [q && { k: 'q', label: `“${q}”` }, city && { k: 'city', label: city }, service && { k: 'service', label: service }].filter(Boolean) as { k: string; label: string }[]
 
   return (
-    <div className="mx-auto max-w-[1100px] space-y-5">
-      <PageHeader icon={Users} title="Professionals" subtitle="Find and refer to trusted loan professionals." />
-
+    <div className="space-y-5">
       {/* Phones: one swipeable row with edge fades. From sm up it is the usual grid and nothing scrolls. */}
       <ScrollFade axis="x" tone="page" className="-mb-3 -mt-1 pb-3 pt-1" innerClassName="sm:min-w-0">
       <KpiGrid slider>
@@ -110,6 +108,15 @@ export default function DirectoryPage() {
         })}
       </ScrollFade>
       )}
+    </div>
+  )
+}
+
+export default function DirectoryPage() {
+  return (
+    <div className="mx-auto max-w-[1100px] space-y-5">
+      <PageHeader icon={Users} title="Professionals" subtitle="Find and refer to trusted loan professionals." />
+      <DirectoryView />
     </div>
   )
 }

@@ -1,9 +1,10 @@
 import { useSyncExternalStore } from 'react'
 import { seedState } from './seed'
+import { applyLocks } from './details'
 import { ratingStats } from './selectors'
-import type { ActivityItem, Agent, Notification, Review, StoreState, Thread } from './types'
+import type { ActivityItem, Agent, LockField, Notification, Review, StoreState, Thread } from './types'
 
-const KEY = 'nora-profile-demo-v2'
+const KEY = 'nora-profile-demo-v3'
 
 function load(): StoreState {
   try {
@@ -75,13 +76,20 @@ function appendToThread(agentId: string, text: string, from: 'me' | 'them'): voi
 
 export const actions = {
   /** Replace an agent's editable fields. */
-  saveProfile(id: string, next: Agent): void {
-    commit(updateAgent(id, (a) => withActivity({ ...a, ...next, id }, 'profile', 'Updated profile details')))
+  saveProfile(id: string, next: Agent, opts: { manager?: boolean } = {}): void {
+    // an agent's edit cannot change fields a manager locked; only a manager's edit can change the locks themselves
+    commit(updateAgent(id, (a) => withActivity({ ...a, ...applyLocks(a, { ...a, ...next, id }, !!opts.manager) }, 'profile', opts.manager ? 'Manager updated profile details' : 'Updated profile details')))
+  },
+  setLocks(id: string, lockedFields: LockField[]): void {
+    commit(updateAgent(id, (a) => withActivity({ ...a, lockedFields }, 'profile', 'Manager updated locked fields')))
+  },
+  setRankFormat(id: string, rankFormat: Agent['rankFormat']): void {
+    commit(updateAgent(id, (a) => ({ ...a, rankFormat })))
   },
   /** Partial update from another part of the app (e.g. NORA). Optionally logs activity and notifies the viewer. */
   patchAgent(id: string, patch: Partial<Agent>, opts: { activity?: string; notify?: string } = {}): void {
     let next = updateAgent(id, (a) => {
-      const merged = { ...a, ...patch }
+      const merged = applyLocks(a, { ...a, ...patch }, false)
       return opts.activity ? withActivity(merged, 'profile', opts.activity) : merged
     })
     if (opts.notify) next = pushNotification(next, opts.notify, `/profile/${id}`)
@@ -90,11 +98,15 @@ export const actions = {
   setAbout(id: string, about: string): void {
     commit(updateAgent(id, (a) => withActivity({ ...a, about }, 'profile', 'Updated About section')))
   },
+  /** Take the profile live or offline. */
+  setPublished(id: string, published: boolean): void {
+    commit(updateAgent(id, (a) => withActivity({ ...a, published }, 'profile', published ? 'Published your profile' : 'Unpublished your profile')))
+  },
   setCover(id: string, cover: string): void {
     commit(updateAgent(id, (a) => ({ ...a, cover })))
   },
   addReview(agentId: string, r: Pick<Review, 'author' | 'rating' | 'text'>): void {
-    const review: Review = { id: uid('r'), date: now(), ...r }
+    const review: Review = { id: uid('r'), date: now(), source: 'Experience.com', ...r }
     let next = updateAgent(agentId, (a) => withActivity({ ...a, reviews: [review, ...a.reviews] }, 'review', `Received a ${r.rating}-star review from ${r.author}`))
     if (agentId === state.viewerId) next = pushNotification(next, `New ${r.rating}-star review from ${r.author}`, `/profile/${agentId}?tab=reviews`)
     commit(next)

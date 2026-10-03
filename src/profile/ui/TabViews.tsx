@@ -7,6 +7,7 @@ import type { ActivityType, Agent, Service } from '../types'
 import { Stars } from './bits'
 import { BTN_GHOST, BTN_OUTLINE, BTN_PRIMARY, INPUT } from './Modal'
 import { ServiceArt } from './ServiceArt'
+import { HoursCard, LocationsCard, ServiceAreasCard } from './LocationHours'
 import { ScrollFade } from './ScrollFade'
 import { CARD, newestFirst } from './Sections'
 import { useToast } from './Toast'
@@ -189,6 +190,7 @@ export function ContactTab({ agent, isOwner }: { agent: Agent; isOwner: boolean 
   }
 
   return (
+    <div className="space-y-5">
     <section className={CARD}>
       <h2 className="border-b border-slate-100 pb-3 text-[17px] font-semibold text-slate-900">Contact</h2>
       {rows.length === 0 && <p className="mt-3 text-sm text-slate-500">No contact details listed.</p>}
@@ -210,5 +212,9 @@ export function ContactTab({ agent, isOwner }: { agent: Agent; isOwner: boolean 
         </div>
       )}
     </section>
+    <LocationsCard agent={agent} isOwner={isOwner} />
+    <ServiceAreasCard agent={agent} isOwner={isOwner} />
+    <HoursCard agent={agent} />
+    </div>
   )
 }

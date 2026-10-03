@@ -1,3 +1,10 @@
+import { connectionsAnswer } from '../presence/connections'
+import { insightsAnswer } from '../presence/insights'
+import { listingsAnswer } from '../presence/listings'
+import { networkAnswer } from '../presence/network'
+import { leaderboard, srsNow } from '../presence/srs'
+import { voceAnswer } from '../presence/voce'
+import { websiteAnswer } from '../presence/website'
 import { fmtDate, ratingStats, similarAgents } from './selectors'
 import type { Agent, StoreState } from './types'
 
@@ -8,6 +15,8 @@ export interface AiAnswer {
   text?: string
   /** Follow-up buttons shown under the answer. */
   actions?: ('referral' | 'reviews')[]
+  /** Buttons that open a page, e.g. { label: 'Open Listings', to: '/listings' }. */
+  links?: { label: string; to: string }[]
 }
 
 export const suggestionsFor = (agent: Agent) => {
@@ -57,10 +66,53 @@ export function draftMessage(
   return opts.tone === 'concise' ? `${greet} ${body} ${close}` : `${greet}\n\n${body}\n\n${close}`
 }
 
+/** The Search Rank Score, broken down by driver, with the biggest gap called out. */
+export function srsAnswer(agent: Agent): AiAnswer {
+  const srs = srsNow(agent)
+  const board = leaderboard(agent, srs)
+  const me = board.find((r) => r.me)!
+  const gap = [...srs.drivers].sort((a, b) => (b.max - b.points) - (a.max - a.points))[0]!
+  const next = board[me.rank - 2]
+  return {
+    intro: `Your Search Rank Score is ${srs.total} of ${srs.max}, ranked #${me.rank} of ${board.length} nearby.${next ? ` ${next.score - srs.total} points to pass ${next.name}.` : ' You are #1.'}`,
+    items: srs.drivers.map((d) => ({ title: `${d.label}: ${d.points} / ${d.max}`, detail: d === gap ? `Biggest opportunity, ${d.max - d.points} points available.` : `${Math.round((d.points / d.max) * 100)}% of this driver.` })),
+    links: [{ label: 'Open Search Rank Score', to: '/search-rank' }, { label: `Improve ${gap.label}`, to: gap.to }],
+  }
+}
+
+/** Questions about the other modules, answered from their live data. Checked before the profile intents. */
+function moduleAnswer(q: string, agent: Agent): AiAnswer | null {
+  if (/search rank|\bsrs\b|\bscore\b|ranking|points to #1/.test(q)) return srsAnswer(agent)
+  if (/listing|publish|director(y|ies)|google business|\bnap\b/.test(q)) return listingsAnswer()
+  if (/connection|connect (my|a|the|google|facebook)|social account|oauth/.test(q)) return connectionsAnswer()
+  if (/website|\bseo\b|load time|meta (tag|description)/.test(q)) return websiteAnswer()
+  if (/ai visibility|authority|\bvoce\b|ai search|\bfaqs?\b|article/.test(q)) return voceAnswer()
+  if (/partner|promo code|referrals? (received|requested|given|table)|my network/.test(q)) return networkAnswer()
+  if (/traffic|impression|page views|google actions|analytics report/.test(q)) return insightsAnswer()
+  return null
+}
+
+const MODULE_SUGGESTIONS: { match: RegExp; items: { icon: 'reviews' | 'strengths' | 'draft' | 'services'; text: string }[]; tools: { label: string; prompt: string }[] }[] = [
+  { match: /^\/search-rank/, items: [{ icon: 'strengths', text: 'Why is my Search Rank Score what it is?' }, { icon: 'services', text: 'How do I get to #1 in my area?' }], tools: [{ label: 'Explain my score', prompt: 'Why is my Search Rank Score what it is?' }, { label: 'Biggest opportunity', prompt: 'How do I raise my score?' }] },
+  { match: /^\/listings/, items: [{ icon: 'strengths', text: 'Which listings are ready to publish?' }, { icon: 'services', text: 'What data issues do my listings have?' }], tools: [{ label: 'Listing status', prompt: 'Which listings are ready to publish?' }, { label: 'Data issues', prompt: 'What data issues do my listings have?' }] },
+  { match: /^\/connections/, items: [{ icon: 'strengths', text: 'Which connections should I add next?' }, { icon: 'services', text: 'How many points do my connections earn?' }], tools: [{ label: 'Next connection', prompt: 'Which connections should I add next?' }, { label: 'Points earned', prompt: 'How many points do my connections earn?' }] },
+  { match: /^\/analytics/, items: [{ icon: 'strengths', text: 'How is my website scoring?' }, { icon: 'services', text: 'What should I fix on my website first?' }], tools: [{ label: 'Website score', prompt: 'How is my website scoring?' }, { label: 'SEO fixes', prompt: 'What should I fix on my website first?' }] },
+  { match: /^\/insights/, items: [{ icon: 'strengths', text: 'How is my traffic trending?' }, { icon: 'services', text: 'Summarize my page views and impressions' }], tools: [{ label: 'Traffic summary', prompt: 'How is my traffic trending?' }, { label: 'Impressions', prompt: 'Summarize my impressions' }] },
+  { match: /^\/ai-visibility/, items: [{ icon: 'strengths', text: 'What is my AI Authority Score?' }, { icon: 'services', text: 'How can I improve my AI visibility?' }], tools: [{ label: 'Authority score', prompt: 'What is my AI Authority Score?' }, { label: 'Write an article', prompt: 'How can I improve my AI visibility?' }] },
+  { match: /^\/(network|professionals|locations)/, items: [{ icon: 'strengths', text: 'Who are my promoted partners?' }, { icon: 'services', text: 'Show my referrals received' }], tools: [{ label: 'Partners', prompt: 'Who are my promoted partners?' }, { label: 'Referrals', prompt: 'Show my referrals received' }] },
+]
+
+/** Quick actions for the page the user is on (the Profile pages keep their own). */
+export const pathSuggestions = (path: string) => MODULE_SUGGESTIONS.find((m) => m.match.test(path))?.items ?? null
+export const pathTools = (path: string) => MODULE_SUGGESTIONS.find((m) => m.match.test(path))?.tools ?? null
+
 export function answer(agent: Agent, state: StoreState, question: string): AiAnswer {
   const q = question.toLowerCase()
   const s = ratingStats(agent.reviews)
   const first = agent.name.replace(/^agent\s+/i, '')
+
+  const mod = moduleAnswer(q, agent)
+  if (mod) return mod
 
   if (/review|feedback|rating|rated|say about/.test(q)) {
     if (!s.count) return { text: `${first} has no reviews yet.` }

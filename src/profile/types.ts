@@ -8,6 +8,8 @@ export interface Service {
   icon: ServiceIcon
 }
 
+export type ReviewSource = 'Google' | 'Facebook' | 'Experience.com'
+
 export interface Review {
   id: string
   author: string
@@ -17,6 +19,8 @@ export interface Review {
   text: string
   /** Owner's public reply. */
   reply?: string
+  /** Where the review came from. Missing means Experience.com. */
+  source?: ReviewSource
 }
 
 export interface Award {
@@ -42,6 +46,37 @@ export interface Social {
   website: string
 }
 
+export interface Address {
+  id: string
+  /** e.g. "Main office", "Solihull branch". The first address in the list is the primary one. */
+  label: string
+  street: string
+  city: string
+  region: string
+  postal: string
+  /** Ids from AMENITIES (details.ts). */
+  amenities: string[]
+}
+
+export interface DayHours {
+  open: boolean
+  /** 24h "HH:MM". */
+  from: string
+  to: string
+}
+
+export interface BusinessHours {
+  /** IANA zone, e.g. "Europe/London". */
+  timeZone: string
+  /** Monday first. */
+  days: DayHours[]
+}
+
+/** Fields a manager can lock so the agent cannot change them. */
+export type LockField = 'name' | 'title' | 'nmls' | 'company' | 'about' | 'specialties' | 'phone' | 'email' | 'location' | 'hours'
+
+export type RankFormat = 'card' | 'banner' | 'reviews'
+
 export interface Agent {
   id: string
   name: string
@@ -56,6 +91,10 @@ export interface Agent {
   /** A preset cover id, or a data URL. */
   cover: string
   pro: boolean
+  /** Whether the profile is live on Experience.com. Missing means published. */
+  published?: boolean
+  /** Cities this professional works in. */
+  serviceAreas: string[]
   about: string
   specialties: string[]
   services: Service[]
@@ -69,6 +108,14 @@ export interface Agent {
   phone: string
   email: string
   social: Social
+  /** Missing means one address derived from `location`. */
+  addresses?: Address[]
+  /** Missing means the default weekly hours. */
+  hours?: BusinessHours
+  /** Fields locked by a manager. */
+  lockedFields?: LockField[]
+  /** Layout of the shareable rank page. Missing means 'card'. */
+  rankFormat?: RankFormat
 }
 
 export interface ThreadMessage {

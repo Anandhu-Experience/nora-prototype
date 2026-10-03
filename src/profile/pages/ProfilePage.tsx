@@ -1,3 +1,5 @@
+import { JsonLd } from '../ui/JsonLd'
+import { networkStore, promotedPartners } from '../../presence/network'
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useStore } from '../store'
@@ -14,6 +16,28 @@ type ModalState =
   | { kind: 'edit' } | { kind: 'cover' } | { kind: 'review' } | { kind: 'report' }
   | { kind: 'service'; service: Service }
   | null
+
+/** Partners the owner pinned in Network, shown on their public profile. */
+function PromotedPartnersCard() {
+  const partners = networkStore.use().promoted.length ? promotedPartners() : []
+  if (!partners.length) return null
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-card">
+      <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-3">
+        <h2 className="text-[17px] font-semibold text-slate-900">Trusted partners</h2>
+        <Link to="/network" className="text-sm font-medium text-blue-600 hover:underline">Manage</Link>
+      </div>
+      <ul className="grid gap-3 sm:grid-cols-2">
+        {partners.map((p) => (
+          <li key={p.id} className="flex items-center gap-3 rounded-xl border border-slate-200 p-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-50 text-sm font-semibold text-blue-600">{p.name.replace(/^agent\s+/i, '')[0]}</span>
+            <div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold text-slate-900">{p.agentId ? <Link to={`/profile/${p.agentId}`} className="hover:text-blue-600">{p.name}</Link> : p.name}</div><div className="truncate text-xs text-slate-500">{p.title} · {p.city}</div></div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
 
 export default function ProfilePage() {
   const { id = 'arjunan' } = useParams()
@@ -71,6 +95,13 @@ function ProfileView({ id }: { id: string }) {
   return (
     <div className="mx-auto max-w-[1100px]">
       <div className="min-w-0 space-y-5">
+        <JsonLd agent={agent} />
+        {agent.published === false && (
+          <div role="status" className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900">
+            {isOwner ? 'This profile is unpublished, so only you can see it. ' : 'This profile isn’t published. '}
+            {isOwner && <Link to="/profile" className="font-semibold underline">Publish it from your overview</Link>}
+          </div>
+        )}
         <ProfileHeader
           agent={agent} isOwner={isOwner} tab={tab} onTab={(t) => goTab(t)}
           onEdit={() => setModal({ kind: 'edit' })} onReferral={() => referral()}
@@ -83,6 +114,7 @@ function ProfileView({ id }: { id: string }) {
               <AboutCard agent={agent} isOwner={isOwner} />
               <ServicesCard agent={agent} onViewAll={() => goTab('services')} onOpen={openService} />
             </div>
+            {isOwner && <PromotedPartnersCard />}
             <div className="grid gap-5 xl:grid-cols-[1.25fr_1fr]">
               <ReviewsCard agent={agent} onViewAll={() => goTab('reviews')} onStars={(n) => goTab('reviews', { stars: String(n) })} />
               <AiInsightsCard agent={agent} />

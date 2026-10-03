@@ -4,11 +4,20 @@ import { useAuth } from './profile/auth'
 import { SiteLayout } from './profile/ui/SiteLayout'
 
 const LoginPage = lazy(() => import('./profile/pages/LoginPage'))
+const OverviewPage = lazy(() => import('./profile/pages/OverviewPage'))
 const ProfilePage = lazy(() => import('./profile/pages/ProfilePage'))
 const DirectoryPage = lazy(() => import('./profile/pages/DirectoryPage'))
 const LocationsPage = lazy(() => import('./profile/pages/LocationsPage'))
 const MessagesPage = lazy(() => import('./profile/pages/MessagesPage'))
 const InsightsPage = lazy(() => import('./profile/pages/InsightsPage'))
+const RankPage = lazy(() => import('./profile/pages/RankPage'))
+const ListingsPage = lazy(() => import('./profile/pages/ListingsPage'))
+const ConnectionsPage = lazy(() => import('./profile/pages/ConnectionsPage'))
+const WebAnalyticsPage = lazy(() => import('./profile/pages/WebAnalyticsPage'))
+const SearchRankPage = lazy(() => import('./profile/pages/SearchRankPage'))
+const AiVisibilityPage = lazy(() => import('./profile/pages/AiVisibilityPage'))
+const NetworkPage = lazy(() => import('./profile/pages/NetworkPage'))
+const NotificationsPage = lazy(() => import('./profile/pages/NotificationsPage'))
 
 /** Everything except /login needs a session. */
 function RequireAuth() {
@@ -24,11 +33,19 @@ export default function App() {
           <Route element={<RequireAuth />}>
           <Route element={<SiteLayout />}>
             <Route path="/" element={<Navigate to="/profile" replace />} />
-            <Route path="/profile" element={<Navigate to="/profile/arjunan" replace />} />
+            <Route path="/profile" element={<OverviewPage />} />
             <Route path="/profile/:id" element={<ProfilePage />} />
+            <Route path="/rank/:id" element={<RankPage />} />
+            <Route path="/listings" element={<ListingsPage />} />
+            <Route path="/connections" element={<ConnectionsPage />} />
+            <Route path="/analytics" element={<WebAnalyticsPage />} />
+            <Route path="/search-rank" element={<SearchRankPage />} />
+            <Route path="/ai-visibility" element={<AiVisibilityPage />} />
+            <Route path="/network" element={<NetworkPage />} />
             <Route path="/professionals" element={<DirectoryPage />} />
             <Route path="/locations" element={<LocationsPage />} />
             <Route path="/messages" element={<MessagesPage />} />
+            <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="/insights" element={<InsightsPage />} />
             <Route path="*" element={<Navigate to="/profile" replace />} />
           </Route>

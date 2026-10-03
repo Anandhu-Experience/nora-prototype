@@ -1,7 +1,7 @@
 import { ArrowUp, BarChart3, Bot, ChevronDown, MessageSquare, MessageSquarePlus, Minus, RotateCcw, Square, Zap, Sparkle, Sparkles, UserPlus, Wrench } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { TOOLS, suggestionsFor } from '../assistant'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { TOOLS, pathSuggestions, pathTools, suggestionsFor } from '../assistant'
 import { useNora, useNoraChat, useNoraPanel, useNoraProcessing, useNoraStop, useReferral } from '../NoraContext'
 import { useStore } from '../store'
 import { ChipSlider } from './ChipSlider'
@@ -19,6 +19,8 @@ export function NoraPanel() {
   const chat = useNoraChat()
   const openReferral = useReferral()
   const nav = useNavigate()
+  const { pathname } = useLocation()
+  const toolChips = pathTools(pathname) ?? TOOLS.map((t) => ({ label: t.label, prompt: t.prompt }))
   const processing = useNoraProcessing()
   const stop = useNoraStop()
   const { state: nora } = useNora()
@@ -26,6 +28,7 @@ export function NoraPanel() {
   const store = useStore()
   const me = store.agents[store.viewerId]!
   const viewing = chat.agent
+  const quickItems = pathSuggestions(pathname) ?? suggestionsFor(viewing)
   const [draft, setDraft] = useState('')
   const [composer, setComposer] = useState(false)
   const [quick, setQuick] = useState(false)
@@ -99,10 +102,11 @@ export function NoraPanel() {
                       </ol>
                     )}
                     {t.answer?.text && <p className="whitespace-pre-line text-slate-700">{t.answer.text}</p>}
-                    {t.answer?.actions && (
+                    {(t.answer?.actions || t.answer?.links) && (
                       <div className="mt-3 flex flex-wrap gap-2">
-                        {t.answer.actions.includes('referral') && <button className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:brightness-110" onClick={() => openReferral(viewing.id, t.answer?.text)}>Use as referral</button>}
-                        {t.answer.actions.includes('reviews') && <button className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50" onClick={() => nav(`/profile/${viewing.id}?tab=reviews`)}>View all reviews</button>}
+                        {t.answer.actions?.includes('referral') && <button className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:brightness-110" onClick={() => openReferral(viewing.id, t.answer?.text)}>Use as referral</button>}
+                        {t.answer.actions?.includes('reviews') && <button className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50" onClick={() => nav(`/profile/${viewing.id}?tab=reviews`)}>View all reviews</button>}
+                        {t.answer.links?.map((l, i) => <button key={l.to + i} className={i === 0 ? 'rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:brightness-110' : 'rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50'} onClick={() => { setOpen(false); nav(l.to) }}>{l.label}</button>)}
                       </div>
                     )}
                   </div>
@@ -123,7 +127,7 @@ export function NoraPanel() {
             <div className="mb-2 rounded-2xl border border-slate-200 bg-slate-50 p-3">
               <div className="mb-2 text-[11px] font-medium uppercase tracking-wider text-slate-400">Quick actions</div>
               <div className="flex flex-col items-start gap-2">
-                {suggestionsFor(viewing).map((q) => (
+                {quickItems.map((q) => (
                   <button key={q.text} onClick={() => { setQuick(false); chat.ask(q.text) }} className="inline-flex max-w-full items-center gap-2 rounded-full border border-slate-200 bg-white py-1.5 pl-1.5 pr-4 text-sm text-slate-800 shadow-sm hover:border-purple-300">
                     <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-pink-50 text-pink-600">{ICON[q.icon]}</span>
                     <span className="truncate">{q.text}</span>
@@ -149,7 +153,7 @@ export function NoraPanel() {
               <button onClick={chat.clear} aria-label="New chat" title="New chat" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50"><RotateCcw size={15} /></button>
             )}
             <ChipSlider>
-              {TOOLS.map((t) => (
+              {toolChips.map((t) => (
                 <button key={t.label} onClick={() => chat.ask(t.prompt)} className="shrink-0 snap-start whitespace-nowrap rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-200">{t.label}</button>
               ))}
             </ChipSlider>

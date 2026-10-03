@@ -34,7 +34,7 @@ export function AboutCard({ agent, isOwner, full }: { agent: Agent; isOwner: boo
   }
 
   return (
-    <section className={CARD}>
+    <section className={`${CARD} flex flex-col`}>
       <div className="flex items-center justify-between border-b border-slate-100 pb-3">
         <h2 className={H2}><FileText size={20} className="text-slate-500" /> About</h2>
         {isOwner && !editing && (
@@ -62,7 +62,7 @@ export function AboutCard({ agent, isOwner, full }: { agent: Agent; isOwner: boo
         </>
       )}
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="mt-auto flex flex-wrap gap-2 pt-4">
         {[agent.title, ...agent.specialties].map((t) => <span key={t} className="rounded-md bg-blue-50 px-3 py-1.5 text-sm text-blue-700">{t}</span>)}
       </div>
     </section>
@@ -71,16 +71,16 @@ export function AboutCard({ agent, isOwner, full }: { agent: Agent; isOwner: boo
 
 export function ServicesCard({ agent, onViewAll, onOpen }: { agent: Agent; onViewAll: () => void; onOpen: (s: Service) => void }) {
   return (
-    <section className={CARD}>
+    <section className={`${CARD} flex flex-col`}>
       <div className="flex items-center justify-between border-b border-slate-100 pb-3">
         <h2 className={H2}><FileText size={20} className="text-slate-500" /> Services</h2>
         <button onClick={onViewAll} className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:underline">View all <ArrowRight size={14} /></button>
       </div>
       {agent.services.length === 0 ? <p className="mt-3 text-sm text-slate-500">No services listed.</p> : (
-        <div className="mt-3 grid grid-cols-3 gap-3">
+        <div className="mt-3 grid flex-1 grid-cols-3 gap-3">
           {agent.services.slice(0, 3).map((s) => (
-            <button key={s.id} onClick={() => onOpen(s)} className="overflow-hidden rounded-xl border border-slate-200 text-left hover:shadow-md">
-              <ServiceArt icon={s.icon} className="h-16" />
+            <button key={s.id} onClick={() => onOpen(s)} className="flex flex-col overflow-hidden rounded-xl border border-slate-200 text-left hover:shadow-md">
+              <ServiceArt icon={s.icon} className="min-h-16 flex-1" />
               <span className="flex items-center justify-between px-2.5 py-2 text-xs font-medium text-slate-800">{s.name} <ChevronRight size={13} className="text-slate-400" /></span>
             </button>
           ))}

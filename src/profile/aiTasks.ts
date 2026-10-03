@@ -3,7 +3,7 @@
  * the server handler (which owns the prompts and the model choice, so the browser can never pick
  * a model or supply its own prompt).
  */
-export type AiTaskKind = 'bio' | 'review-reply' | 'service'
+export type AiTaskKind = 'bio' | 'review-reply' | 'service' | 'meta' | 'article' | 'faq'
 
 /**
  * What each model accepts, because the request shape differs by model:
@@ -41,6 +41,25 @@ export const AI_TASKS = {
     model: 'claude-haiku-4-5' as ModelId,
     allowedModel: 'haiku-4-5',
     maxChars: 500,
+  },
+  meta: {
+    label: 'Website meta description',
+    model: 'claude-haiku-4-5' as ModelId,
+    allowedModel: 'haiku-4-5',
+    maxChars: 155,
+  },
+  article: {
+    label: 'AI-answerable article',
+    model: 'claude-haiku-4-5' as ModelId,
+    allowedModel: 'haiku-4-5',
+    /** Body limit; the title has ARTICLE_TITLE_MAX. */
+    maxChars: 900,
+  },
+  faq: {
+    label: 'FAQ answer',
+    model: 'claude-haiku-4-5' as ModelId,
+    allowedModel: 'haiku-4-5',
+    maxChars: 420,
   },
 } as const satisfies Record<AiTaskKind, { label: string; model: ModelId; allowedModel: string; maxChars: number }>
 
@@ -84,4 +103,30 @@ export interface ServiceInput {
   /** What is there now, if anything. The AI improves it rather than starting blind. */
   existingTagline: string
   existingDescription: string
+}
+
+export const ARTICLE_TITLE_MAX = 90
+
+/** The few facts about the professional that website / content drafts may draw on. */
+export interface AgentFacts {
+  agentFirstName: string
+  agentTitle: string
+  location: string
+  yearsExperience: number
+  specialties: string[]
+}
+
+/** A meta description for the professional's website. */
+export interface MetaInput extends AgentFacts {
+  services: string[]
+}
+
+/** An article for AI Visibility. `topic` is the user's own words and is treated as untrusted. */
+export interface ArticleInput extends AgentFacts {
+  topic: string
+}
+
+/** An answer to a question clients ask (an FAQ). `question` is untrusted. */
+export interface FaqInput extends AgentFacts {
+  question: string
 }

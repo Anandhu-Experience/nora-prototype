@@ -1,5 +1,5 @@
 import { generateSkillDraft, type GenerateOptions } from '../nora/generateSkillDraft'
-import { AI_TASKS, type ReplyInput, type ServiceInput } from './aiTasks'
+import { AI_TASKS, type AgentFacts, type ArticleInput, type FaqInput, type MetaInput, type ReplyInput, type ServiceInput } from './aiTasks'
 import type { Agent, Review, Service } from './types'
 
 const firstName = (name: string) => name.replace(/^agent\s+/i, '').trim().split(/\s+/)[0] || 'there'
@@ -98,4 +98,94 @@ export async function draftServiceCopy(agent: Agent, service: Service, opts?: Ge
   )
   const copy = draft.payload as { blurb: string; description: string }
   return { ...copy, source: draft.source ?? 'mock', model: draft.model, note: draft.note }
+}
+
+/* ---------------- website, AI visibility ---------------- */
+
+const factsOf = (agent: Agent): AgentFacts => ({
+  agentFirstName: firstName(agent.name),
+  agentTitle: agent.title,
+  location: agent.location,
+  yearsExperience: agent.yearsExperience,
+  specialties: agent.specialties.slice(0, 12),
+})
+
+export interface TextDraft {
+  text: string
+  source: 'ai' | 'mock'
+  model?: string
+  note?: string
+}
+
+/** Template used when AI is unavailable. States only what the profile already says. */
+export function templateMeta(agent: Agent): string {
+  const what = agent.specialties.slice(0, 2).join(' and ').toLowerCase() || 'home loans'
+  const out = `${firstName(agent.name)} is a ${agent.title.toLowerCase()} in ${agent.location} helping clients with ${what}.`
+  return out.length <= AI_TASKS.meta.maxChars ? out : `${out.slice(0, AI_TASKS.meta.maxChars - 1).trim()}…`
+}
+
+/** Draft the website's meta description. The owner reads and edits it; nothing is saved until they apply it. */
+export async function draftMeta(agent: Agent, opts?: GenerateOptions): Promise<TextDraft> {
+  const input: MetaInput = { ...factsOf(agent), services: agent.services.map((s) => s.name.slice(0, 80)).slice(0, 12) }
+  const template = templateMeta(agent)
+  const draft = await generateSkillDraft(
+    {
+      skillId: 'meta-description',
+      model: AI_TASKS.meta.allowedModel,
+      instruction: 'Draft the website meta description (server-side prompt).',
+      mockDraft: { summary: 'Meta description', changes: [], payload: { text: template } },
+      ai: { kind: 'meta', input, apply: (text, d) => ({ ...d, payload: { text } }) },
+    },
+    opts,
+  )
+  return { text: (draft.payload as { text: string }).text, source: draft.source ?? 'mock', model: draft.model, note: draft.note }
+}
+
+export interface ArticleDraft { title: string; body: string; source: 'ai' | 'mock'; model?: string; note?: string }
+
+export function templateArticle(agent: Agent, topic: string): { title: string; body: string } {
+  const t = topic.trim().replace(/[?.!]+$/, '') || 'Getting a home loan'
+  return {
+    title: t.length > 80 ? `${t.slice(0, 77).trim()}…` : t,
+    body: `${t} is a common question for home buyers in ${agent.city}. The right answer depends on your finances and goals, so the best first step is a short conversation to review your options.\n\nI am ${firstName(agent.name)}, a ${agent.title.toLowerCase()} with ${agent.yearsExperience}+ years of experience. I can walk you through the process step by step.`,
+  }
+}
+
+/** Draft an AI-answerable article on a topic. The owner edits it and decides whether to save or publish it. */
+export async function draftArticle(agent: Agent, topic: string, opts?: GenerateOptions): Promise<ArticleDraft> {
+  const input: ArticleInput = { ...factsOf(agent), topic: topic.trim().slice(0, 240) }
+  const template = templateArticle(agent, topic)
+  const draft = await generateSkillDraft(
+    {
+      skillId: 'ai-article',
+      model: AI_TASKS.article.allowedModel,
+      instruction: 'Draft an AI-answerable article (server-side prompt).',
+      mockDraft: { summary: 'Article', changes: [], payload: template },
+      ai: { kind: 'article', input, apply: (text, d, fields) => ({ ...d, payload: { title: fields?.title ?? template.title, body: fields?.body ?? text } }) },
+    },
+    opts,
+  )
+  const art = draft.payload as { title: string; body: string }
+  return { ...art, source: draft.source ?? 'mock', model: draft.model, note: draft.note }
+}
+
+export function templateFaq(agent: Agent, question: string): string {
+  return `${question.trim().replace(/\?+$/, '')} depends on your situation. I would be glad to go through it with you, so please get in touch and we can look at your options together. — ${firstName(agent.name)}`
+}
+
+/** Draft the answer to an FAQ question. */
+export async function draftFaqAnswer(agent: Agent, question: string, opts?: GenerateOptions): Promise<TextDraft> {
+  const input: FaqInput = { ...factsOf(agent), question: question.trim().slice(0, 240) }
+  const template = templateFaq(agent, question)
+  const draft = await generateSkillDraft(
+    {
+      skillId: 'faq-answer',
+      model: AI_TASKS.faq.allowedModel,
+      instruction: 'Draft the FAQ answer (server-side prompt).',
+      mockDraft: { summary: 'FAQ answer', changes: [], payload: { text: template } },
+      ai: { kind: 'faq', input, apply: (text, d) => ({ ...d, payload: { text } }) },
+    },
+    opts,
+  )
+  return { text: (draft.payload as { text: string }).text, source: draft.source ?? 'mock', model: draft.model, note: draft.note }
 }

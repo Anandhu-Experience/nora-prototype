@@ -1,5 +1,7 @@
 import { missingProfileFields, profileCompleteness } from '../mock/rules'
-import type { Agent, Review, StoreState } from './types'
+import { isLocked } from './details'
+import { MIN_SPECIALTIES } from '../mock/rules'
+import type { Agent, Review, ReviewSource, StoreState } from './types'
 
 export const COVERS: Record<string, { label: string; css: string }> = {
   sunset: { label: 'Sunset', css: 'linear-gradient(135deg,#1e2a4a 0%,#5b3b7a 40%,#e0705a 75%,#f3b46b 100%)' },
@@ -100,3 +102,57 @@ const asRuleProfile = (a: Agent) => ({
 /** Same data-quality rules NORA uses, applied to any agent. */
 export const agentCompleteness = (a: Agent): number => profileCompleteness(asRuleProfile(a))
 export const agentGaps = (a: Agent): string[] => missingProfileFields(asRuleProfile(a))
+
+/* ---------------- Profile Overview ---------------- */
+
+export const isUploadedCover = (cover: string): boolean => cover.startsWith('data:')
+
+export type RecActionId = 'photo' | 'specialties' | 'cover' | 'service-areas' | 'awards' | 'bio'
+
+export interface RecAction {
+  id: RecActionId
+  title: string
+  description: string
+  /** Button label. */
+  cta: string
+}
+
+export const MIN_SERVICE_AREAS = 3
+export const MIN_AWARDS = 5
+export const MIN_BIO_CHARS = 400
+
+/**
+ * Things that would make the profile stronger, derived from its real data. Each one is something the user can
+ * act on (and that stops applying once they do), in the order worth doing them.
+ */
+export function recommendedActions(a: Agent): RecAction[] {
+  const out: RecAction[] = []
+  if (!a.photoUrl.trim()) out.push({ id: 'photo', title: 'Add a profile photo', description: 'A clear photo helps clients recognise you.', cta: 'Add Photo' })
+  if (a.specialties.length < MIN_SPECIALTIES && !isLocked(a, 'specialties')) out.push({ id: 'specialties', title: 'Add more specialties', description: 'List the loan types you handle so clients can find you.', cta: 'Fix with NORA' })
+  if (!isUploadedCover(a.cover)) out.push({ id: 'cover', title: 'Add a cover photo', description: 'Make your profile more engaging and memorable.', cta: 'Add Photo' })
+  if ((a.serviceAreas ?? []).length < MIN_SERVICE_AREAS && !isLocked(a, 'location')) out.push({ id: 'service-areas', title: 'Complete service areas', description: 'Help potential clients know where you work.', cta: 'Update' })
+  if (a.awards.length < MIN_AWARDS) out.push({ id: 'awards', title: 'Add awards or certifications', description: 'Showcase your achievements and build credibility.', cta: 'Add Details' })
+  if (a.about.trim().length < MIN_BIO_CHARS && !isLocked(a, 'about')) out.push({ id: 'bio', title: 'Expand your bio', description: 'A longer, detailed bio can improve your search visibility.', cta: 'Edit Bio' })
+  return out
+}
+
+export const REVIEW_SOURCES: ReviewSource[] = ['Google', 'Facebook', 'Experience.com']
+export const sourceOf = (r: Review): ReviewSource => r.source ?? 'Experience.com'
+
+export function reviewSources(a: Agent): { source: ReviewSource; count: number; avg: number }[] {
+  return REVIEW_SOURCES.map((source) => {
+    const rs = a.reviews.filter((r) => sourceOf(r) === source)
+    return { source, count: rs.length, avg: rs.length ? rs.reduce((n, r) => n + r.rating, 0) / rs.length : 0 }
+  })
+}
+
+/** "3 days ago", "2 weeks ago", "1 year ago". */
+export function timeAgo(iso: string, now: number = Date.now()): string {
+  const days = Math.max(0, Math.floor((now - new Date(iso).getTime()) / 86_400_000))
+  const unit = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'} ago`
+  if (days < 1) return 'today'
+  if (days < 7) return unit(days, 'day')
+  if (days < 30) return unit(Math.floor(days / 7), 'week')
+  if (days < 365) return unit(Math.floor(days / 30), 'month')
+  return unit(Math.floor(days / 365), 'year')
+}

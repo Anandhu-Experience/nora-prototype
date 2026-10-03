@@ -3,8 +3,8 @@ import type { ActivityItem, Agent, Award, Review, Service, ServiceIcon, StoreSta
 const svc = (id: string, name: string, blurb: string, description: string, icon: ServiceIcon): Service => ({
   id, name, blurb, description, icon,
 })
-const rev = (id: string, author: string, rating: number, date: string, text: string, reply?: string): Review => ({
-  id, author, rating, date, text, reply,
+const rev = (id: string, author: string, rating: number, date: string, text: string, reply?: string, source?: Review['source']): Review => ({
+  id, author, rating, date, text, reply, source,
 })
 const award = (id: string, title: string, issuer: string, year: number): Award => ({ id, title, issuer, year })
 const act = (id: string, at: string, type: ActivityItem['type'], text: string): ActivityItem => ({ id, at, type, text })
@@ -25,6 +25,8 @@ const arjunan: Agent = {
   photoUrl: avatarSvg('#34d399', '#15803d', 'A'),
   cover: 'sunset',
   pro: true,
+  published: true,
+  serviceAreas: ['Birmingham', 'Solihull'],
   about:
     'Dedicated mortgage loan officer with 8+ years of experience helping clients achieve their homeownership goals. Specialize in home loans, refinancing, and first-time buyer programs. I take the time to explain every option, compare lenders on your behalf, and stay with you from pre-approval to the day you get your keys.',
   specialties: ['Home Loans', 'Refinance', 'First-time Buyers'],
@@ -45,8 +47,8 @@ const arjunan: Agent = {
     act('x4', '2023-11-30', 'profile', 'Added "Refinance" to services'),
   ],
   reviews: [
-    rev('r1', 'John Doe', 5, '2024-01-12', 'Excellent service and great communication throughout the process. Highly recommended!'),
-    rev('r2', 'Sarah Mitchell', 5, '2023-11-03', 'Arjunan found us a rate well below what our bank offered and was always quick to reply. Made buying our first home stress-free.', 'Thank you Sarah, congratulations on the new home!'),
+    rev('r1', 'John Doe', 5, '2024-01-12', 'Excellent service and great communication throughout the process. Highly recommended!', undefined, 'Google'),
+    rev('r2', 'Sarah Mitchell', 5, '2023-11-03', 'Arjunan found us a rate well below what our bank offered and was always quick to reply. Made buying our first home stress-free.', 'Thank you Sarah, congratulations on the new home!', 'Facebook'),
     rev('r3', 'Tom Baker', 4, '2023-09-21', 'Very knowledgeable and professional. The refinance took a little longer than expected but the result was great.'),
   ],
   yearsExperience: 8,
@@ -56,11 +58,24 @@ const arjunan: Agent = {
   phone: '+44 121 555 0142',
   email: 'arjunan@newamerican.example',
   social: { linkedin: 'https://linkedin.com/in/agent-arjunan', twitter: 'https://x.com/agentarjunan', facebook: '', website: 'https://arjunan.example.com' },
+  addresses: [
+    { id: 'addr1', label: 'Main office', street: '45 Colmore Row', city: 'Birmingham', region: 'UK', postal: 'B3 2BH', amenities: ['parking', 'step-free', 'private-room', 'wifi', 'transit'] },
+    { id: 'addr2', label: 'Solihull branch', street: '12 Poplar Road', city: 'Solihull', region: 'UK', postal: 'B91 3AE', amenities: ['parking', 'evenings', 'home-visits'] },
+  ],
+  hours: {
+    timeZone: 'Europe/London',
+    days: [
+      { open: true, from: '09:00', to: '17:30' }, { open: true, from: '09:00', to: '17:30' }, { open: true, from: '09:00', to: '19:00' },
+      { open: true, from: '09:00', to: '17:30' }, { open: true, from: '09:00', to: '17:00' }, { open: true, from: '10:00', to: '14:00' }, { open: false, from: '10:00', to: '14:00' },
+    ],
+  },
+  lockedFields: ['nmls', 'company'],
+  rankFormat: 'card',
 }
 
 const priya: Agent = {
   id: 'priya-nair', name: 'Priya Nair', title: 'Mortgage Broker', nmls: '2234510', company: 'Northern Home Finance',
-  location: 'Manchester, UK', city: 'Manchester', photoUrl: '', cover: 'ocean', pro: true,
+  location: 'Manchester, UK', city: 'Manchester', photoUrl: '', cover: 'ocean', pro: true, serviceAreas: ['Manchester', 'Salford', 'Stockport'],
   about: 'Independent broker with 11 years helping self-employed clients and landlords secure the right mortgage. Whole-of-market advice with a personal touch.',
   specialties: ['Buy-to-let', 'Remortgage', 'Self-employed'],
   services: [
@@ -82,7 +97,7 @@ const priya: Agent = {
 
 const daniel: Agent = {
   id: 'daniel-okafor', name: 'Daniel Okafor', title: 'Loan Officer', nmls: '3345621', company: 'Pennine Lending',
-  location: 'Leeds, UK', city: 'Leeds', photoUrl: '', cover: 'forest', pro: false,
+  location: 'Leeds, UK', city: 'Leeds', photoUrl: '', cover: 'forest', pro: false, serviceAreas: ['Leeds'],
   about: 'Loan officer focused on first-time buyers and shared ownership across West Yorkshire.',
   specialties: ['First-time Buyers', 'Shared Ownership'],
   services: [
@@ -100,7 +115,7 @@ const daniel: Agent = {
 
 const sofia: Agent = {
   id: 'sofia-marin', name: 'Sofia Marin', title: 'Mortgage Advisor', nmls: '4456732', company: 'Capital Home Loans',
-  location: 'London, UK', city: 'London', photoUrl: '', cover: 'dusk', pro: true,
+  location: 'London, UK', city: 'London', photoUrl: '', cover: 'dusk', pro: true, serviceAreas: ['London', 'Surrey', 'Kent'],
   about: 'London-based advisor with 14 years in jumbo, investor and refinance lending. Known for fast turnarounds on complex cases.',
   specialties: ['Jumbo Loans', 'Refinance', 'Investors'],
   services: [
@@ -123,7 +138,7 @@ const sofia: Agent = {
 
 const marcus: Agent = {
   id: 'marcus-lee', name: 'Marcus Lee', title: 'Home Loan Specialist', nmls: '5567843', company: 'New American Funding',
-  location: 'Birmingham, UK', city: 'Birmingham', photoUrl: '', cover: 'slate', pro: false,
+  location: 'Birmingham, UK', city: 'Birmingham', photoUrl: '', cover: 'slate', pro: false, serviceAreas: ['Birmingham'],
   about: 'Newer to the industry and keen to help young families get on the ladder.',
   specialties: ['Home Loans', 'Family Mortgages'],
   services: [svc('s1', 'Home Loans', 'Mortgages for families', 'Straightforward purchase mortgages for families.', 'home')],
@@ -135,6 +150,10 @@ const marcus: Agent = {
 
 export const ANALYTICS = {
   viewsLast7Days: [18, 24, 31, 27, 35, 42, 38],
+  /** Mock trend figures shown on the Profile Overview. */
+  viewsLast30Days: 860,
+  viewsChangePct: 18,
+  rankChangePct: 24,
   days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
   referralsReceived: 9,
   /** Sent before this session; messages you send now are added on top. */
