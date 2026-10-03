@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { buildReportHtml, PARAM_LABEL, websiteAnswer, websiteIssues, websiteParameters, websitePoints, websiteStore, websiteActions, WEBSITE_MAX, type ParamId } from '../../presence/website'
 import { wait } from '../../presence/persist'
 import { useStore } from '../store'
-import { AiInsightBar, Ring, ScoreBar, type Suggestion } from '../ui/kit'
+import { AiInsightBar, Pill, Ring, ScoreBar, type Suggestion } from '../ui/kit'
 import { BTN_GHOST } from '../ui/Modal'
 import { Card, EmptyState, PageHeader } from '../ui/PageBits'
 import { useToast } from '../ui/Toast'
@@ -66,7 +66,7 @@ export default function WebAnalyticsPage() {
       <VerifyHero state={state} score={score} agent={agent} />
 
       {state.scanning && !state.scan && (
-        <Card><div className="flex items-center gap-3 text-sm text-slate-600" role="status"><Loader2 size={18} className="animate-spin text-blue-600" /> Scanning your site: checking NAP data, load time, HTML tags, reviews and security…</div><div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full w-1/2 animate-pulse rounded-full bg-blue-500" /></div></Card>
+        <Card><div className="flex items-center gap-3 text-sm text-slate-600" role="status"><Loader2 size={18} className="animate-spin text-blue-600" /> Scanning your site: checking NAP data, load time, HTML tags, reviews and security. A live scan can take up to 30 seconds…</div><div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full w-1/2 animate-pulse rounded-full bg-blue-500" /></div></Card>
       )}
 
       {!verified && !state.scanning && <EmptyState>Verify your website to see your score and the issues to fix.</EmptyState>}
@@ -89,6 +89,27 @@ export default function WebAnalyticsPage() {
               </div>
             </div>
           </Card>
+          {state.source && (
+            <Card title="About this scan" right={<Pill tone={state.source === 'live' ? 'green' : 'amber'}>{state.source === 'live' ? 'Live scan' : 'Sample data'}</Pill>}>
+              {state.source === 'sample' && <p className="text-sm text-slate-600">{state.scanNote || 'Sample results are shown instead of a live scan.'}</p>}
+              {state.source === 'live' && (
+                <div className="space-y-3">
+                  <p className="text-sm text-slate-600">The page was fetched from the live site. Load time and the scores below come from Google PageSpeed Insights (mobile). Name, phone and address are matched against the page text.</p>
+                  {state.lighthouse && (
+                    <div className="flex flex-wrap gap-3">
+                      {([['SEO score', state.lighthouse.seo], ['Performance score', state.lighthouse.performance]] as const).map(([label, v]) => (
+                        <div key={label} className="rounded-xl bg-slate-50 px-4 py-2.5"><div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{label}</div><div className={`text-xl font-semibold ${v == null ? 'text-slate-400' : v >= 90 ? 'text-emerald-600' : v >= 50 ? 'text-amber-600' : 'text-rose-600'}`}>{v ?? 'n/a'}{v != null && <span className="text-sm font-normal text-slate-400"> / 100</span>}</div></div>
+                      ))}
+                    </div>
+                  )}
+                  {state.lighthouse && state.lighthouse.issues.length > 0 && (
+                    <div><div className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-500">Lighthouse SEO issues</div><ul className="list-disc space-y-0.5 pl-5 text-sm text-slate-700">{state.lighthouse.issues.map((i) => <li key={i.id}>{i.title}</li>)}</ul></div>
+                  )}
+                  {state.scanNote && <p className="text-xs text-amber-700">{state.scanNote}</p>}
+                </div>
+              )}
+            </Card>
+          )}
           <div className="space-y-4">
             {params.map((p) => <ParamCard key={p.id} param={p} state={state} agent={agent} open={open.has(p.id)} onToggle={() => toggle(p.id)} onFix={(id) => void websiteActions.markFixed(id, agent)} />)}
           </div>

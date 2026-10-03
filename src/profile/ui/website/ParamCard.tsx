@@ -127,7 +127,7 @@ export function ParamCard({ param, state, agent, open, onToggle, onFix }: { para
         <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${full ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}><Icon size={19} /></span>
         <span className="min-w-0 flex-1">
           <span className="block text-[15px] font-semibold text-slate-900">{param.label}</span>
-          <span className="block text-xs text-slate-500">{param.id === 'load' ? `Measured ${state.scan?.loadTime.toFixed(1)}s` : `${okCount} of ${items.length} available`}</span>
+          <span className="block text-xs text-slate-500">{param.id === 'load' ? state.scan?.loadTime != null ? `Measured ${state.scan.loadTime.toFixed(1)}s` : 'Not measured' : `${okCount} of ${items.length} available`}</span>
         </span>
         <Pill tone={full ? 'green' : param.points > 0 ? 'amber' : 'red'}>{param.points}/{param.max} pts</Pill>
         <ChevronDown size={18} className={`text-slate-400 transition ${open ? 'rotate-180' : ''}`} />
@@ -135,7 +135,7 @@ export function ParamCard({ param, state, agent, open, onToggle, onFix }: { para
       {open && (
         <div className="space-y-3 border-t border-slate-100 p-5">
           <p className="text-sm text-slate-500">{BLURB[param.id]}</p>
-          {param.id === 'load' && state.scan && <LoadBar seconds={state.scan.loadTime} />}
+          {param.id === 'load' && state.scan && state.scan.loadTime != null && <LoadBar seconds={state.scan.loadTime} />}
           <ul className="space-y-2.5">
             {items.map((i) => <ItemRow key={i.id} item={i} agent={agent} busy={state.scanning} onFix={onFix} />)}
           </ul>

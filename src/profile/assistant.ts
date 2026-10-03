@@ -106,6 +106,21 @@ const MODULE_SUGGESTIONS: { match: RegExp; items: { icon: 'reviews' | 'strengths
 export const pathSuggestions = (path: string) => MODULE_SUGGESTIONS.find((m) => m.match.test(path))?.items ?? null
 export const pathTools = (path: string) => MODULE_SUGGESTIONS.find((m) => m.match.test(path))?.tools ?? null
 
+/** A short name for what NORA matched a question to. Mirrors the order of the checks in `answer`. */
+export function intentOf(question: string): string {
+  const q = question.toLowerCase()
+  const checks: [RegExp, string][] = [
+    [/search rank|\bsrs\b|\bscore\b|ranking|points to #1/, 'Search Rank Score'], [/listing|publish|director(y|ies)|google business|\bnap\b/, 'Listings'],
+    [/connection|connect (my|a|the|google|facebook)|social account|oauth/, 'Connections'], [/website|\bseo\b|load time|meta (tag|description)/, 'Web Analytics'],
+    [/ai visibility|authority|\bvoce\b|ai search|\bfaqs?\b|article/, 'AI Visibility'], [/partner|promo code|referrals? (received|requested|given|table)|my network/, 'Network'],
+    [/traffic|impression|page views|google actions|analytics report/, 'Insights'], [/review|feedback|rating|rated|say about/, 'Reviews'],
+    [/strength|good at|best at|why/, 'Strengths'], [/compar|versus|\bvs\b|top agent|similar/, 'Comparison'], [/draft|write|message|referral|email|reach out/, 'Draft a message'],
+    [/service|offer|do they do|loan|help with/, 'Services'], [/activity|achiev|award|recent|news/, 'Activity and awards'], [/contact|phone|call|email|reach/, 'Contact details'],
+    [/experience|how long|years|loans|track/, 'Experience'], [/respon|fast|quick|how soon/, 'Response time'],
+  ]
+  return checks.find(([re]) => re.test(q))?.[1] ?? 'General help (no specific topic matched)'
+}
+
 export function answer(agent: Agent, state: StoreState, question: string): AiAnswer {
   const q = question.toLowerCase()
   const s = ratingStats(agent.reviews)

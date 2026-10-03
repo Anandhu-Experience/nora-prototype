@@ -1,9 +1,10 @@
-import { ArrowUp, BarChart3, Bot, ChevronDown, MessageSquare, MessageSquarePlus, Minus, RotateCcw, Square, Zap, Sparkle, Sparkles, UserPlus, Wrench } from 'lucide-react'
+import { ArrowUp, BarChart3, Trash2, Workflow, Bot, ChevronDown, MessageSquare, MessageSquarePlus, Minus, RotateCcw, Square, Zap, Sparkle, Sparkles, UserPlus, Wrench } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { TOOLS, pathSuggestions, pathTools, suggestionsFor } from '../assistant'
 import { useNora, useNoraChat, useNoraPanel, useNoraProcessing, useNoraStop, useReferral } from '../NoraContext'
 import { useStore } from '../store'
+import { traceStore } from '../../guardrails/trace'
 import { ChipSlider } from './ChipSlider'
 import { ScrollFade } from './ScrollFade'
 import { NoraActions } from './NoraActions'
@@ -52,36 +53,38 @@ export function NoraPanel() {
 
   return (
     <section aria-label="NORA" role="dialog" aria-modal="false" tabIndex={-1} aria-busy={processing} className={`outline-none flex h-full min-h-0 flex-col overflow-hidden rounded-3xl border-2 border-pink-300 bg-gradient-to-b from-purple-500 via-purple-400 to-pink-300 shadow-card ${processing ? 'nora-glow' : ''}`}>
-      <header className="relative flex items-center gap-3 px-5 pb-7 pt-4 text-white">
+      <header className="relative grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-5 pb-7 pt-4 text-white">
         <Sparkle size={14} className="absolute right-16 top-3 opacity-80" fill="currentColor" />
         <Sparkle size={9} className="absolute right-24 top-8 opacity-60" fill="currentColor" />
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/90 text-purple-600"><Sparkles size={20} /></span>
-        <div className="min-w-0 flex-1">
-          <div className="font-semibold leading-tight">NORA</div>
-          <div className="truncate text-xs text-white/80">{viewing.id === me.id ? 'Ask anything about your profile' : `Ask anything about ${first(viewing.name)}`}</div>
+        <span aria-hidden />
+        <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white/90 text-purple-600" role="img" aria-label="NORA"><Sparkles size={22} /></span>
+        <div className="flex items-center justify-end gap-2">
+          {processing && (
+            <button onClick={stop} disabled={!stoppable} aria-label="Stop NORA" title={stoppable ? 'Stop this run. Nothing will be changed.' : 'Applying changes…'} className="inline-flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-semibold text-rose-600 shadow-sm hover:bg-white disabled:opacity-60">
+              <Square size={11} fill="currentColor" /> {stoppable ? 'Stop' : 'Applying…'}
+            </button>
+          )}
+          <button onClick={() => setOpen(false)} aria-label="Minimize NORA" title="Minimize" className="rounded-full p-1.5 text-white/90 hover:bg-white/20"><Minus size={20} /></button>
         </div>
-        {processing && (
-          <button onClick={stop} disabled={!stoppable} aria-label="Stop NORA" title={stoppable ? 'Stop this run. Nothing will be changed.' : 'Applying changes…'} className="inline-flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-semibold text-rose-600 shadow-sm hover:bg-white disabled:opacity-60">
-            <Square size={11} fill="currentColor" /> {stoppable ? 'Stop' : 'Applying…'}
-          </button>
-        )}
-        <button onClick={() => setOpen(false)} aria-label="Minimize NORA" title="Minimize" className="rounded-full p-1.5 text-white/90 hover:bg-white/20"><Minus size={20} /></button>
       </header>
 
       <div className="relative -mt-4 flex min-h-0 flex-1 flex-col rounded-t-3xl bg-white">
-        <ScrollFade className="px-5 pb-3 pt-6">
+        <ScrollFade className="px-5 pb-3 pt-3">
           {!hasChat && (
-            <div className="flex flex-col items-center text-center">
-              <span className="relative flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-pink-400 to-purple-500 text-white shadow-[0_0_36px_rgba(236,72,153,0.45)]"><Bot size={28} /></span>
-              <h2 className="mt-3 text-xl font-semibold text-slate-900">Hello {first(me.name)}</h2>
-              <p className="text-sm text-slate-500">{viewing.id === me.id ? 'What can I help you with today?' : `You’re viewing ${viewing.name}’s profile. What can I help you with?`}</p>
+            <div className="flex items-center gap-3 text-left">
+              <span className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-pink-400 to-purple-500 text-white shadow-[0_0_28px_rgba(236,72,153,0.4)]"><Bot size={22} /></span>
+              <div className="min-w-0">
+                <h2 className="text-lg font-semibold leading-tight text-slate-900">Hello {first(me.name)}</h2>
+                <p className="text-sm text-slate-500">{viewing.id === me.id ? 'What can I help you with today?' : `You’re viewing ${viewing.name}’s profile. What can I help you with?`}</p>
+              </div>
             </div>
           )}
 
-          <div className="mt-5"><NoraActions /></div>
+          <div className="mt-3"><NoraActions /></div>
 
           {hasChat && (
             <div className="mt-5 space-y-3" aria-live="polite">
+              <div className="flex justify-end"><button onClick={chat.clear} className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-500 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"><Trash2 size={12} /> Clear chat</button></div>
               {chat.turns.map((t) =>
                 t.role === 'user' ? (
                   <div key={t.id} className="flex justify-end">
@@ -102,6 +105,7 @@ export function NoraPanel() {
                       </ol>
                     )}
                     {t.answer?.text && <p className="whitespace-pre-line text-slate-700">{t.answer.text}</p>}
+                    {t.traceId && <button onClick={() => traceStore.open(t.traceId!)} className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-slate-400 hover:text-blue-600"><Workflow size={12} /> View steps</button>}
                     {(t.answer?.actions || t.answer?.links) && (
                       <div className="mt-3 flex flex-wrap gap-2">
                         {t.answer.actions?.includes('referral') && <button className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:brightness-110" onClick={() => openReferral(viewing.id, t.answer?.text)}>Use as referral</button>}
@@ -150,7 +154,7 @@ export function NoraPanel() {
               {composer ? <ChevronDown size={16} /> : <MessageSquarePlus size={16} />}
             </button>
             {hasChat && (
-              <button onClick={chat.clear} aria-label="New chat" title="New chat" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50"><RotateCcw size={15} /></button>
+              <button onClick={chat.clear} aria-label="Clear chat" title="Clear chat" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50"><RotateCcw size={15} /></button>
             )}
             <ChipSlider>
               {toolChips.map((t) => (

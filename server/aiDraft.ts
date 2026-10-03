@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { guardInput } from '../src/guardrails/index.ts'
 import { AI_TASKS, ARTICLE_TITLE_MAX, MODEL_CAPS, SERVICE_TAGLINE_MAX, isAiTaskKind, type AgentFacts, type AiTaskKind, type ArticleInput, type BioInput, type FaqInput, type MetaInput, type ModelId, type ReplyInput, type ServiceInput } from '../src/profile/aiTasks.ts'
 
 /**
@@ -9,7 +10,7 @@ import { AI_TASKS, ARTICLE_TITLE_MAX, MODEL_CAPS, SERVICE_TAGLINE_MAX, isAiTaskK
 
 export interface DraftResult {
   status: number
-  body: { text?: string; model?: string; error?: string; fields?: Record<string, string> }
+  body: { text?: string; model?: string; error?: string; fields?: Record<string, string>; guardrail?: { method: string; code: string; message: string }; guardrails?: { masked: Record<string, number | undefined>; warnings: string[] } }
 }
 
 type Messages = Pick<Anthropic, 'beta'>
@@ -89,7 +90,8 @@ export function parseArticleInput(v: unknown): ArticleInput | null {
   if (typeof v !== 'object' || v === null) return null
   const o = v as Record<string, unknown>
   const facts = parseFacts(o), topic = str(o.topic, 240)
-  return facts && topic ? { ...facts, topic } : null
+  const focus = o.focus === undefined ? '' : str(o.focus, 240)
+  return facts && topic && focus !== null ? { ...facts, topic, ...(focus ? { focus } : {}) } : null
 }
 
 export function parseFaqInput(v: unknown): FaqInput | null {
@@ -171,7 +173,7 @@ export function buildPrompt(kind: AiTaskKind, input: BioInput | ReplyInput | Ser
   }
   if (kind === 'article') {
     const v = input as ArticleInput
-    return { system: ARTICLE_SYSTEM, user: `${tag('context', JSON.stringify(factsOf(v), null, 2))}\n${tag('topic', v.topic)}\n\nWrite the article.` }
+    return { system: ARTICLE_SYSTEM, user: `${tag('context', JSON.stringify(factsOf(v), null, 2))}\n${tag('topic', v.topic)}${v.focus ? `\n${tag('focus', v.focus)}` : ''}\n\nWrite the article.` }
   }
   if (kind === 'faq') {
     const v = input as FaqInput
@@ -278,13 +280,19 @@ export function createAiDraftHandler(opts: HandlerOptions = {}) {
     const parsed = parsers[kind](input)
     if (!parsed) return { status: 400, body: { error: 'invalid_input' } }
 
+    // input guardrails: mask sensitive details, detect injection, check safety and scope. Blocked requests never reach the model.
+    const guard = guardInput(kind, parsed)
+    if (!guard.allowed) return { status: 422, body: { error: 'guardrail_blocked', guardrail: { method: guard.blocked!.method, code: guard.blocked!.code, message: guard.blocked!.message } } }
+    const safe = guard.input
+    const guardrails = Object.keys(guard.masked).length || guard.warnings.length ? { masked: guard.masked, warnings: guard.warnings } : undefined
+
     const t = now()
     while (hits.length && t - hits[0]! > windowMs) hits.shift()
     if (hits.length >= max) return { status: 429, body: { error: 'rate_limited' } }
     hits.push(t)
 
     const task = AI_TASKS[kind]
-    const { system, user } = buildPrompt(kind, parsed)
+    const { system, user } = buildPrompt(kind, safe)
     try {
       cached ??= new Anthropic({ timeout: 20_000, maxRetries: 1 })
       const response = await cached.beta.messages.create(buildRequest(task.model, system, user, env))
@@ -294,16 +302,16 @@ export function createAiDraftHandler(opts: HandlerOptions = {}) {
       if (kind === 'service') {
         const copy = parseServiceCopy(raw.join('\n'))
         if (!copy) return { status: 502, body: { error: 'bad_format' } }
-        return { status: 200, body: { text: copy.description, model: response.model, fields: copy } }
+        return { status: 200, body: { text: copy.description, model: response.model, fields: copy, guardrails } }
       }
       if (kind === 'article') {
         const art = parseArticle(raw.join('\n'))
         if (!art) return { status: 502, body: { error: 'bad_format' } }
-        return { status: 200, body: { text: art.body, model: response.model, fields: art } }
+        return { status: 200, body: { text: art.body, model: response.model, fields: art, guardrails } }
       }
       const fitted = fitToLimit(raw.join(' '), task.maxChars)
       if (!fitted) return { status: 502, body: { error: 'empty_response' } }
-      return { status: 200, body: { text: fitted, model: response.model } }
+      return { status: 200, body: { text: fitted, model: response.model, guardrails } }
     } catch (err) {
       // Upstream detail (which can echo request data or credentials) is never forwarded to the browser.
       if (err instanceof Anthropic.RateLimitError) return { status: 429, body: { error: 'upstream_rate_limited' } }

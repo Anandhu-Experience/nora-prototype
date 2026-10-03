@@ -1,18 +1,20 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { useMatch } from 'react-router-dom'
+import { guardChat, maskNotice } from '../guardrails'
+import { startTrace } from '../guardrails/trace'
 import { buildGraph } from '../mock/graph'
 import { DEFAULT_SCENARIO } from '../mock/user'
 import { NoraEngine } from '../nora/noraEngine'
 import type { NoraState, NoraStatus } from '../nora/noraMachine'
 import { getSkill } from '../nora/skillRegistry'
-import { answer, type AiAnswer } from './assistant'
+import { answer, intentOf, type AiAnswer } from './assistant'
 import { resetPresence } from '../presence/persist'
 import { actions as profileActions, getState as getProfileState, subscribe as subscribeProfile, useStore } from './store'
 import type { Agent } from './types'
 import { ReferralModal } from './ui/ReferralModal'
 import { graphChanges } from './ui/graphDiff'
 
-export interface ChatTurn { id: number; role: 'user' | 'ai'; text?: string; answer?: AiAnswer }
+export interface ChatTurn { id: number; role: 'user' | 'ai'; text?: string; answer?: AiAnswer; /** The flow trace of the message this answers. */ traceId?: string }
 
 interface Chat {
   /** The agent the conversation is about (the profile being viewed, else you). */
@@ -136,16 +138,39 @@ export function NoraProvider({ children }: { children: ReactNode }) {
   const agentId = agent.id
   const ask = useCallback(
     (question: string) => {
-      const q = question.trim()
-      if (!q) return
+      if (!question.trim()) return
+      // input guardrails: the message is shown and answered with sensitive details masked; injection, unsafe or out-of-scope requests are refused
+      const guard = guardChat(question.trim())
+      const q = guard.input
       setOpen(true)
       setTurns((t) => [...t, { id: ++seq.current, role: 'user', text: q }])
       setPending(true)
       clearTimeout(timer.current)
+
+      // flow trace: input -> guardrails -> agent -> LLM -> reply, filled in as each step finishes
+      const tr = startTrace('chat', q)
+      tr.add({ id: 'input', stage: 'input', label: 'You typed in NORA chat', status: 'pass', detail: `"${q.slice(0, 90)}${q.length > 90 ? '…' : ''}"${Object.keys(guard.masked).length ? ' (shown masked)' : ''}` })
+      guard.checks.forEach((c) => tr.add({ id: c.id, stage: 'guardrails', label: c.label, status: 'pending', detail: 'Checking…' }))
+      tr.add({ id: 'agent', stage: 'agent', label: 'Agent: NORA', status: 'pending', detail: 'Waiting for the guardrails' })
+      tr.add({ id: 'llm', stage: 'llm', label: 'LLM', status: 'pending', detail: '' })
+      tr.add({ id: 'output', stage: 'output', label: 'Reply to you', status: 'pending', detail: '' })
+      guard.checks.forEach((c, i) => setTimeout(() => tr.update(c.id, { status: c.status, detail: c.detail }), 110 * (i + 1)))
+      setTimeout(() => tr.update('agent', guard.allowed ? { status: 'pass', detail: `Matched your question to: ${intentOf(q)}` } : { status: 'skip', detail: `Not run: blocked by ${guard.blocked!.method} check` }), 110 * (guard.checks.length + 1))
+
       timer.current = setTimeout(() => {
         const s = getProfileState()
         const a = s.agents[agentId] ?? s.agents[s.viewerId]!
-        setTurns((t) => [...t, { id: ++seq.current, role: 'ai', answer: answer(a, s, q) }])
+        let reply: AiAnswer
+        if (!guard.allowed) reply = { text: guard.blocked!.message }
+        else {
+          const base = answer(a, s, q)
+          const notice = maskNotice(guard.masked)
+          reply = notice ? { ...base, intro: base.intro ? `${notice} ${base.intro}` : notice } : base
+        }
+        tr.update('llm', { status: 'skip', detail: guard.allowed ? 'No model call. Chat answers are built from your live data with rules.' : 'Not called: blocked before it' })
+        tr.update('output', guard.allowed ? { status: 'info', detail: 'Answer shown. Output guardrails are not built yet.' } : { status: 'block', detail: `Refused: ${guard.blocked!.message}` })
+        tr.finish(guard.allowed ? 'answered' : 'blocked')
+        setTurns((t) => [...t, { id: ++seq.current, role: 'ai', answer: reply, traceId: tr.id }])
         setPending(false)
       }, 700)
     },

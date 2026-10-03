@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { setLatency } from '../persist'
-import { buildReportHtml, normalizeUrl, recommendedTag, verifyOutcome, websiteAnswer, websiteIssues, websiteActions, websiteParameters, websitePoints, websiteStore, WEBSITE_MAX } from '../website'
+import { buildReportHtml, normalizeUrl, recommendedTag, verifyOutcome, websiteAnswer, websiteIssues, websiteActions, websiteParameters, websitePoints, websiteStore, WEBSITE_MAX, scanFromAudit } from '../website'
 
 const agent = { name: 'Agent Arjunan', title: 'Mortgage Loan Officer', city: 'Birmingham', phone: '+44 121 555 0142' }
 
@@ -90,5 +90,21 @@ describe('report and NORA', () => {
     expect(a.intro).toContain('149')
     expect(a.items!.length).toBeGreaterThan(0)
     expect(a.links![0]!.to).toBe('/analytics')
+  })
+})
+
+describe('mapping a live audit onto the page', () => {
+  it('turns found items into earned items, and an unmeasured load time into null', () => {
+    const scan = scanFromAudit({
+      page: { title: 'T', description: '', robots: 'index', language: 'en', charset: 'utf-8', og: '', google: '', twitter: '' },
+      nap: { name: true, phone: false, address: false }, reviews: { widget: false, schema: true, count: 12 },
+      security: { ssl: true, expires: '2027-03-14', httpsRedirect: false }, load: { seconds: null }, lighthouse: null, notes: [],
+    }, { name: 'Agent Arjunan', phone: '+44 1', city: 'Birmingham' })
+    expect(scan.loadTime).toBeNull()
+    expect(scan.tags.title.ok).toBe(true)
+    expect(scan.tags.description.ok).toBe(false)
+    expect(scan.nap.name).toEqual({ ok: true, value: 'Agent Arjunan' })
+    expect(scan.nap.phone.ok).toBe(false)
+    expect(scan.reviews).toEqual({ widget: false, schema: true, count: 12 })
   })
 })

@@ -124,6 +124,8 @@ export interface MetaInput extends AgentFacts {
 /** An article for AI Visibility. `topic` is the user's own words and is treated as untrusted. */
 export interface ArticleInput extends AgentFacts {
   topic: string
+  /** Optional app-written personalization ("Focus on X for clients in Y"). Kept apart so the scope check judges only the user's topic. */
+  focus?: string
 }
 
 /** An answer to a question clients ask (an FAQ). `question` is untrusted. */

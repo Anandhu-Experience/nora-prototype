@@ -35,7 +35,8 @@ export interface Failure { code: 'invalid' | 'tag' | 'unreachable'; reason: stri
 interface Field { ok: boolean; value: string }
 export interface Scan {
   nap: { name: Field; address: Field; phone: Field }
-  loadTime: number
+  /** Seconds to the largest paint, or null when it could not be measured. */
+  loadTime: number | null
   tags: Record<TagId, Field>
   reviews: { widget: boolean; schema: boolean; count: number }
   security: { ssl: boolean; expires: string; httpsRedirect: boolean }
@@ -52,6 +53,12 @@ export interface WebsiteState {
   /** Fixes the owner confirmed; they survive a re-scan. */
   fixes: string[]
   tagValues: Partial<Record<TagId, string>>
+  /** Where the last scan came from: a real check of the site, or labelled sample data. */
+  source?: 'live' | 'sample'
+  /** Why a scan fell back to sample data, or anything that could not be checked in a live one. */
+  scanNote?: string
+  /** Lighthouse scores from PageSpeed Insights (live scans only). */
+  lighthouse?: { seo: number | null; performance: number | null; issues: { id: string; title: string }[] } | null
 }
 
 export const SEED_URL = 'https://www.newamerican.example/arjunan'
@@ -157,12 +164,12 @@ const it = (id: string, param: ParamId, label: string, ok: boolean, value: strin
 export function websiteItems(s: WebsiteState): Item[] {
   const c = s.scan
   if (!c) return []
-  const band = loadBand(c.loadTime)
+  const band = c.loadTime == null ? 'poor' : loadBand(c.loadTime)
   return [
     it('nap-name', 'nap', 'Name', c.nap.name.ok, c.nap.name.value, 14, 'Show your full name consistently in the header and footer.'),
     it('nap-address', 'nap', 'Work address', c.nap.address.ok, c.nap.address.value, 13, 'Add your office address to the footer or contact page, exactly as on your listings.'),
     it('nap-phone', 'nap', 'Phone number', c.nap.phone.ok, c.nap.phone.value, 13, 'Add a clickable phone number to the header and footer.'),
-    it('load', 'load', 'Page load time', band === 'good', `${c.loadTime.toFixed(1)}s`, 40, 'Compress hero images, enable caching and remove unused scripts to get under 2.5 seconds.', LOAD_PTS[band]),
+    it('load', 'load', 'Page load time', band === 'good', c.loadTime == null ? 'Not measured' : `${c.loadTime.toFixed(1)}s`, 40, 'Compress hero images, enable caching and remove unused scripts to get under 2.5 seconds.', LOAD_PTS[band]),
     ...TAGS.map((t) => it(`tag-${t.id}`, 'html', t.label, c.tags[t.id].ok, c.tags[t.id].value, t.points, `Add the ${t.label.toLowerCase()} tag to the <head> of your home page.`)),
     it('rev-widget', 'reviews', 'Review widget on page', c.reviews.widget, c.reviews.widget ? 'Widget found' : '', 16, 'Embed your Experience.com review widget on your home page.'),
     it('rev-schema', 'reviews', 'Review schema markup', c.reviews.schema, c.reviews.schema ? 'AggregateRating found' : '', 14, 'Add AggregateRating structured data so stars can appear in search results.'),
@@ -198,7 +205,7 @@ function withFixes(base: Scan, s: WebsiteState): Scan {
   if (has('nap-name')) c.nap.name = f(c.nap.name.value || 'Agent Arjunan')
   if (has('nap-address')) c.nap.address = f('Birmingham, B1 1AA')
   if (has('nap-phone')) c.nap.phone = f(c.nap.phone.value || '+44 121 555 0142')
-  if (has('load')) c.loadTime = Math.min(c.loadTime, Math.max(1.8, Math.round((c.loadTime - 1.3) * 10) / 10))
+  if (has('load') && c.loadTime != null) c.loadTime = Math.min(c.loadTime, Math.max(1.8, Math.round((c.loadTime - 1.3) * 10) / 10))
   if (has('rev-widget')) c.reviews.widget = true
   if (has('rev-schema')) c.reviews.schema = true
   if (has('rev-count')) c.reviews.count = Math.max(c.reviews.count, 3)
@@ -206,6 +213,53 @@ function withFixes(base: Scan, s: WebsiteState): Scan {
   if (has('sec-https')) c.security.httpsRedirect = true
   for (const t of TAGS) { const v = s.tagValues[t.id]; if (v) c.tags[t.id] = f(v) }
   return c
+}
+
+/* ---------------- live scan (server: /api/seo/audit) ---------------- */
+
+interface AuditResponse {
+  page: Record<'title' | 'description' | 'robots' | 'language' | 'charset' | 'og' | 'google' | 'twitter', string>
+  nap: { name: boolean; phone: boolean; address: boolean }
+  reviews: { widget: boolean; schema: boolean; count: number }
+  security: { ssl: boolean; expires: string; httpsRedirect: boolean }
+  load: { seconds: number | null }
+  lighthouse: WebsiteState['lighthouse']
+  notes: string[]
+}
+
+/** The demo and unreachable-on-purpose addresses never go to the network. */
+const isDemoHost = (url: string): boolean => /example|newamerican|blocked|down|offline/.test(hostOf(url))
+
+const REASON: Record<string, string> = {
+  invalid_url: 'That address cannot be checked.', blocked_address: 'Private and local addresses cannot be checked.', unreachable: 'The site could not be reached.',
+  not_html: 'That address is not a web page.', too_large: 'The page is too large to check.', rate_limited: 'Too many scans in a minute. Try again shortly.',
+}
+
+/** Maps the server's audit onto our Scan. Exported for tests. */
+export function scanFromAudit(a: AuditResponse, agent?: Pick<Agent, 'name' | 'phone' | 'city'>): Scan {
+  const fld = (ok: boolean, value: string): Field => (ok ? f(value) : none)
+  const t = (v: string): Field => (v ? f(v) : none)
+  return {
+    nap: { name: fld(a.nap.name, agent?.name ?? 'Found on page'), address: fld(a.nap.address, agent?.city ?? 'Found on page'), phone: fld(a.nap.phone, agent?.phone ?? 'Found on page') },
+    loadTime: a.load.seconds,
+    tags: { description: t(a.page.description), title: t(a.page.title), robots: t(a.page.robots), language: t(a.page.language), charset: t(a.page.charset), og: t(a.page.og), google: t(a.page.google), twitter: t(a.page.twitter) },
+    reviews: { widget: a.reviews.widget, schema: a.reviews.schema, count: a.reviews.count },
+    security: { ssl: a.security.ssl, expires: a.security.expires, httpsRedirect: a.security.httpsRedirect },
+  }
+}
+
+type LiveOutcome = { ok: true; scan: Scan; lighthouse: WebsiteState['lighthouse']; notes: string[] } | { ok: false; reason: string }
+
+async function liveScan(url: string, agent?: Pick<Agent, 'name' | 'title' | 'city' | 'phone'>): Promise<LiveOutcome> {
+  if (isDemoHost(url)) return { ok: false, reason: 'This is a demo address, so sample data is shown. Enter a real public website to run a live scan.' }
+  try {
+    const res = await fetch('/api/seo/audit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, nap: { name: agent?.name, phone: agent?.phone, address: agent?.city } }), signal: AbortSignal.timeout(100_000) })
+    const body = (await res.json()) as AuditResponse & { error?: string; message?: string }
+    if (!res.ok) return { ok: false, reason: body.message ?? REASON[body.error ?? ''] ?? 'The live scan is unavailable, so sample data is shown.' }
+    return { ok: true, scan: scanFromAudit(body, agent), lighthouse: body.lighthouse, notes: body.notes }
+  } catch {
+    return { ok: false, reason: 'The live scan is unavailable here, so sample data is shown.' }
+  }
 }
 
 export const websiteActions = {
@@ -231,9 +285,14 @@ export const websiteActions = {
   addTagForMe() { patch({ tagInstalled: true }) },
   async scan(agent?: Pick<Agent, 'name' | 'title' | 'city' | 'phone'>): Promise<void> {
     patch({ scanning: true })
-    await wait(Math.round(latency * 2.5))
     const s = websiteStore.get()
-    patch({ scanning: false, scan: withFixes(baseScan(s.url, agent), s), scannedAt: nowIso() })
+    const live = await liveScan(s.url, agent)
+    if (live.ok) {
+      patch({ scanning: false, scan: withFixes(live.scan, s), scannedAt: nowIso(), source: 'live', lighthouse: live.lighthouse, scanNote: live.notes.join(' ') })
+      return
+    }
+    await wait(Math.round(latency * 2.5))
+    patch({ scanning: false, scan: withFixes(baseScan(s.url, agent), s), scannedAt: nowIso(), source: 'sample', lighthouse: null, scanNote: live.reason })
   },
   /** Apply a missing tag the owner approved (a draft or the recommended value). */
   applyTag(id: TagId, value: string): void {

@@ -152,8 +152,8 @@ export function templateArticle(agent: Agent, topic: string): { title: string; b
 }
 
 /** Draft an AI-answerable article on a topic. The owner edits it and decides whether to save or publish it. */
-export async function draftArticle(agent: Agent, topic: string, opts?: GenerateOptions): Promise<ArticleDraft> {
-  const input: ArticleInput = { ...factsOf(agent), topic: topic.trim().slice(0, 240) }
+export async function draftArticle(agent: Agent, topic: string, opts?: GenerateOptions & { focus?: string }): Promise<ArticleDraft> {
+  const input: ArticleInput = { ...factsOf(agent), topic: topic.trim().slice(0, 240), ...(opts?.focus ? { focus: opts.focus.slice(0, 240) } : {}) }
   const template = templateArticle(agent, topic)
   const draft = await generateSkillDraft(
     {

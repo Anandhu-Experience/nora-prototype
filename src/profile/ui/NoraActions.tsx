@@ -1,5 +1,5 @@
-import { Check, CheckCircle2, ChevronRight, ExternalLink, Info, Loader2, ShieldCheck, Square, X } from 'lucide-react'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Check, CheckCircle2, ChevronRight, ExternalLink, Eye, EyeOff, Info, Loader2, ShieldCheck, Square, X } from 'lucide-react'
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import type { NoraEngine } from '../../nora/noraEngine'
 import type { Evaluation, NoraState } from '../../nora/noraMachine'
 import { getSkill } from '../../nora/skillRegistry'
@@ -7,6 +7,17 @@ import type { Skill } from '../../skills/types'
 import { useNora, useNoraFocus, useNoraProcessing, useNoraStop } from '../NoraContext'
 import { graphChanges } from './graphDiff'
 import { BTN_GHOST, BTN_PRIMARY } from './Modal'
+
+/** Whether NORA's suggestion cards are tucked away. Remembered in the browser; shared so the panel can shrink when they are hidden. */
+const HIDE_KEY = 'nora-suggestions-hidden'
+const hideListeners = new Set<() => void>()
+const readHidden = (): boolean => { try { return localStorage.getItem(HIDE_KEY) === '1' } catch { return false } }
+let hiddenNow = readHidden()
+export const suggestionsHidden = {
+  get: () => hiddenNow,
+  set: (v: boolean) => { hiddenNow = v; try { localStorage.setItem(HIDE_KEY, v ? '1' : '0') } catch { /* storage unavailable */ } hideListeners.forEach((l) => l()) },
+  use: (): boolean => useSyncExternalStore((fn) => { hideListeners.add(fn); return () => { hideListeners.delete(fn) } }, () => hiddenNow),
+}
 
 const WORKING: Record<string, string> = {
   IDLE: 'Signing you in…',
@@ -27,6 +38,8 @@ const SMALL = '!px-3 !py-1.5 !text-xs'
 export function NoraActions() {
   const { engine, state } = useNora()
   const s = state.status
+  const hidden = suggestionsHidden.use()
+  const toggle = () => suggestionsHidden.set(!hidden)
 
   if (s in WORKING) {
     return <div className={`${CARD} flex items-center gap-2 text-slate-700`}><Loader2 size={15} className="animate-spin text-purple-500" /> {WORKING[s]}</div>
@@ -36,11 +49,14 @@ export function NoraActions() {
     const queue = [...state.evaluations].filter((e) => e.rank).sort((a, b) => a.rank! - b.rank!)
     return (
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <p className="text-sm font-medium text-blue-600">Found {queue.length} high-impact {queue.length === 1 ? 'opportunity' : 'opportunities'}</p>
-          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-500"><span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" /> NORA live</span>
+          <span className="flex items-center gap-3">
+            <button onClick={toggle} aria-expanded={!hidden} className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-blue-600">{hidden ? <><Eye size={13} /> Show</> : <><EyeOff size={13} /> Hide</>}</button>
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-500"><span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" /> NORA live</span>
+          </span>
         </div>
-        {queue.map((e) => <ActionCard key={e.skillId} engine={engine} state={state} evaluation={e} />)}
+        {!hidden && queue.map((e) => <ActionCard key={e.skillId} engine={engine} state={state} evaluation={e} />)}
       </div>
     )
   }

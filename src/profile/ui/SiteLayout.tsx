@@ -11,6 +11,7 @@ import { Avatar, MENU_ITEM, Popover } from './bits'
 import { Logo } from './Logo'
 import { NoraPanel } from './NoraPanel'
 import { ToastProvider, useToast } from './Toast'
+import { TraceButton, TraceDrawer } from './TraceDrawer'
 
 interface NavItem {
   to: string
@@ -271,6 +272,7 @@ function TopBar() {
             <span className="hidden sm:inline">Ask NORA</span>
             {needsYou && !open && <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-white" aria-label="Needs your attention" />}
           </button>
+          <TraceButton />
           <ResetDemo />
           <div className="hidden sm:block"><ThemeToggle /></div>
           <BellMenu />
@@ -347,6 +349,7 @@ function Shell() {
         <main className="min-w-0 flex-1 p-4 md:p-6"><Outlet /></main>
       </div>
       {open && <NoraDialog />}
+      <TraceDrawer />
       <NotificationToaster />
     </div>
   )

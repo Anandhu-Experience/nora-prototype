@@ -2,6 +2,7 @@ import react from '@vitejs/plugin-react'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { defineConfig, loadEnv, type Plugin } from 'vite'
 import { createAiDraftHandler } from './server/aiDraft.ts'
+import { createSiteAuditHandler } from './server/siteAudit.ts'
 
 /**
  * POST /api/ai/draft: the server half of AI drafting (see server/aiDraft.ts).
@@ -36,9 +37,29 @@ function aiDraftApi(): Plugin {
   }
 }
 
+/** POST /api/seo/audit: the server half of the Web Analytics scan (see server/siteAudit.ts). Dev and `vite preview` only. */
+function siteAuditApi(): Plugin {
+  const handle = createSiteAuditHandler()
+  const middleware = async (req: IncomingMessage, res: ServerResponse) => {
+    const send = (status: number, body: unknown) => { res.statusCode = status; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(body)) }
+    if (req.method !== 'POST') return send(405, { error: 'method_not_allowed' })
+    let raw = ''
+    for await (const chunk of req) { raw += chunk; if (raw.length > 8 * 1024) return send(413, { error: 'too_large' }) }
+    let parsed: unknown
+    try { parsed = JSON.parse(raw) } catch { return send(400, { error: 'bad_json' }) }
+    const out = await handle(parsed)
+    send(out.status, out.body)
+  }
+  return {
+    name: 'nora-site-audit',
+    configureServer: (server) => void server.middlewares.use('/api/seo/audit', middleware),
+    configurePreviewServer: (server) => void server.middlewares.use('/api/seo/audit', middleware),
+  }
+}
+
 export default defineConfig(({ mode }) => {
   // Pull ANTHROPIC_API_KEY (and friends) from .env / .env.local into this Node process. Vite only exposes
   // VITE_-prefixed variables to the browser, so the key stays server-side. A key already in the shell wins.
   for (const [k, v] of Object.entries(loadEnv(mode, process.cwd(), ''))) process.env[k] ??= v
-  return { plugins: [react(), aiDraftApi()] }
+  return { plugins: [react(), aiDraftApi(), siteAuditApi()] }
 })

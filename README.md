@@ -76,6 +76,25 @@ Besides Profile, the sidebar has the plan's other modules, each a page with mock
 **More AI drafts** (same safeguards as above: server-side prompt, Haiku 4.5, labelled template fallback, nothing saved until you approve): website meta description, AI-visibility article, FAQ answer.
 
 
+## Input guardrails
+
+Everything a person types or pastes goes through four checks before it reaches the AI model or NORA (`src/guardrails/`, plain TypeScript with no dependencies and no cost, shared by the server and the browser):
+
+1. **Mask sensitive information:** emails, phones, SSNs, cards (Luhn), bank accounts, dates of birth, loan IDs, API keys, addresses and IPs become `[EMAIL]`, `[PHONE]` and so on. Only counts are kept.
+2. **Detect prompt injection:** weighted signals. 5 or more blocks, 2 to 4 is allowed with a warning. Our own fence tags are rewritten so text cannot close one.
+3. **Content safety:** threats, hate, sexual content, self-harm, fraud and discriminatory lending are blocked; profanity is starred out.
+4. **Scope validation:** article topics and FAQ questions must be about mortgage or home finance (strict); NORA chat only refuses clearly unrelated requests (lenient).
+
+They run in the draft handler (`server/aiDraft.ts`, authoritative: a blocked request answers 422 `guardrail_blocked` and never reaches the model), in the browser before a draft request, and in NORA chat. A bad review snippet is dropped from a bio request instead of blocking it. **Flow trace:** the **Flow** button in the top bar (and *View steps* under a NORA answer) opens a panel with every chat message and AI draft as a run: input, the four guardrail checks, the agent, the server's second check, the LLM and the output, each with a status and a time. It updates live while a run is in progress and keeps the last 30 (`src/guardrails/trace.ts`). Chat shows the LLM step as skipped, because NORA's chat answers are rule-based. Try it: ask NORA "Write a poem", paste a phone number into the chat, or write an article about pasta. Limits: rules, not a trained classifier, English only; it checks input, not what the model writes.
+
+## Live website scan (Web Analytics)
+
+`/analytics` now scans real websites. The server (`server/siteAudit.ts`, mounted at `POST /api/seo/audit` in `vite.config.ts`) fetches the public page itself and returns: title, meta description, robots, language, charset, Open Graph, Google and Twitter tags, review schema, whether name, phone and address appear in the text, the SSL certificate and expiry, the http to https redirect, and load time plus Lighthouse SEO and Performance scores from Google's free **PageSpeed Insights API** (key in `PAGESPEED_API_KEY` in `.env.local`, see `.env.example`; it works without a key at a much lower quota). A scan takes 10 to 30 seconds.
+
+- **Safety:** the server only fetches public http(s) addresses on ports 80 and 443. Every address and every redirect is checked (no localhost, private ranges, link-local, or names that resolve to them), with a time limit, a 1.5 MB cap and 6 scans a minute.
+- **Fallback:** demo addresses (`newamerican.example` and similar), a missing endpoint or a failed scan show labelled **sample data** with the reason. A live scan is labelled **Live scan**. If PageSpeed fails, the rest still shows and Load Time says "Not measured".
+- **Still mock:** ownership verification (the tag check) is unchanged. Restart `npm run dev` after adding the key or pulling this change, because the server reads `vite.config.ts` and `.env.local` at startup.
+
 ## One profile, two views
 
 The profile has a single source of truth, the Profile page store (`src/profile/store.ts`). NORA's `getProfile/updateProfile` read and write it (via `mock/database.ts`). After *Approve & Apply* the page shows the new data, an Activity entry ("NORA updated your specialties") and a bell notification. Listings, analytics, connections and VOCE are NORA-local mock data.

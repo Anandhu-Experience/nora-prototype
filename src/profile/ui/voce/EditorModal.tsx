@@ -32,8 +32,8 @@ export function EditorModal({ seed, onClose }: { seed: EditorSeed; onClose: () =
     if (t.length < 4) { toast('Tell NORA what to write about first.', 'error'); return }
     if (!canDraft(voceStore.get())) { toast(`Not enough credits: a draft costs ${DRAFT_COST}. Upgrade your plan on the page.`, 'error'); return }
     setBusy('write')
-    const spec = seed.personalize ? ` Focus on ${me.specialties.slice(0, 2).join(' and ')} for clients in ${me.location}.` : ''
-    const res = await draftArticle(me, t + spec)
+    const focus = seed.personalize ? `Focus on ${me.specialties.slice(0, 2).join(' and ')} for clients in ${me.location}.` : ''
+    const res = await draftArticle(me, t, { focus })
     spendDraftCredits()
     setPrev({ title, body })
     const plain = res.source === 'mock' ? templateArticle(me, t) : res
