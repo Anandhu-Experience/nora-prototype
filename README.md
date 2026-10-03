@@ -104,6 +104,10 @@ The two API endpoints are Vite dev-server middleware, so on Vercel they are sepa
 - **The agent's website** is now `<deployed origin>/profile/arjunan`, so **Web Analytics → Re-scan** checks the live page. On localhost it keeps the old demo address (sample data) unless you set `VITE_SITE_URL=https://your-app.vercel.app` in `.env.local` and restart `npm run dev`; then the local app scans the deployed page (the scan runs on your local server).
 - **Limits:** the profile HTML is built from the seeded demo data, so edits made in a visitor's browser are not in it. The endpoints are public and the rate limit is per function instance, so set a spend limit on any keys and consider adding authentication before sharing the URL widely.
 
+## Expertise Graph
+
+`/graph` (sidebar: Expertise Graph) draws everything known about the professional as a graph: the person and their Search Rank Score at the centre, eight rings round it (Identity, Credentials & Licenses, Products & Services, Social & sameAs, Reviews, Content, Place & Geo, Hierarchy) and a node for each fact. It is built from the profile record plus the Connections, Listings, Reviews, AI Visibility, Network and Web Analytics data (`src/profile/graphModel.ts`), so it changes when they do. Scroll or use the buttons to zoom, drag to pan, hover a ring to isolate its branch, and click a node to see its source, schema.org mapping and verification state. The side panel shows how many nodes each ring has ("not captured" when empty); the top cards count live nodes (from connected modules), record nodes (from the profile record), rings populated and the Search Rank Score.
+
 ## One profile, two views
 
 The profile has a single source of truth, the Profile page store (`src/profile/store.ts`). NORA's `getProfile/updateProfile` read and write it (via `mock/database.ts`). After *Approve & Apply* the page shows the new data, an Activity entry ("NORA updated your specialties") and a bell notification. Listings, analytics, connections and VOCE are NORA-local mock data.

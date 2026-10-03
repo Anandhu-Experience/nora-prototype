@@ -1,4 +1,4 @@
-import { Bell, Building2, ChevronDown, Loader2, MapPin, Menu, Moon, Network, RotateCcw, Search, Sparkles, Sun, BarChart3, TrendingUp, Activity, User, Users, Wrench, X, Bot, type LucideIcon } from 'lucide-react'
+import { Share2, Bell, Building2, ChevronDown, Loader2, MapPin, Menu, Moon, Network, RotateCcw, Search, Sparkles, Sun, BarChart3, TrendingUp, Activity, User, Users, Wrench, X, Bot, type LucideIcon } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { SCENARIOS, SCENARIO_IDS } from '../../mock/user'
@@ -25,6 +25,7 @@ interface NavItem {
 /** The sidebar: the product's modules. Messages and notifications live in the top bar and account menu. */
 const NAV_MAIN: NavItem[] = [
   { to: '/profile', label: 'Profile & Presence', icon: User },
+  { to: '/graph', label: 'Expertise Graph', icon: Share2 },
   { to: '/listings', label: 'Listings', icon: Building2 },
   { to: '/connections', label: 'Connections', icon: Users },
   { to: '/analytics', label: 'Web Analytics', icon: Activity },

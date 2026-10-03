@@ -14,6 +14,7 @@ const RankPage = lazy(() => import('./profile/pages/RankPage'))
 const ListingsPage = lazy(() => import('./profile/pages/ListingsPage'))
 const ConnectionsPage = lazy(() => import('./profile/pages/ConnectionsPage'))
 const WebAnalyticsPage = lazy(() => import('./profile/pages/WebAnalyticsPage'))
+const GraphPage = lazy(() => import('./profile/pages/GraphPage'))
 const SrsGuidePage = lazy(() => import('./profile/pages/SrsGuidePage'))
 const SearchRankPage = lazy(() => import('./profile/pages/SearchRankPage'))
 const AiVisibilityPage = lazy(() => import('./profile/pages/AiVisibilityPage'))
@@ -41,6 +42,7 @@ export default function App() {
             <Route path="/connections" element={<ConnectionsPage />} />
             <Route path="/analytics" element={<WebAnalyticsPage />} />
             <Route path="/search-rank" element={<SearchRankPage />} />
+            <Route path="/graph" element={<GraphPage />} />
             <Route path="/search-rank/how-it-works" element={<SrsGuidePage />} />
             <Route path="/ai-visibility" element={<AiVisibilityPage />} />
             <Route path="/network" element={<NetworkPage />} />
