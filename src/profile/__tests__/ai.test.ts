@@ -21,7 +21,7 @@ const ok = (text: string, model = 'claude-opus-5-5') => vi.fn(async () => new Re
 const status = (code: number) => vi.fn(async () => new Response(JSON.stringify({ error: 'x' }), { status: code }))
 
 const request = (): DraftRequest => ({
-  skillId: 't', model: 'opus-5-5', instruction: '',
+  skillId: 'profile-completion', model: 'opus-5-5', instruction: '',
   mockDraft: { summary: 's', changes: [{ label: 'Bio', before: 'Empty', after: 'TEMPLATE' }], payload: { bio: 'TEMPLATE' } },
   ai: { kind: 'bio', input: { x: 1 }, apply: (text, d) => { d.changes[0]!.after = text; (d.payload as { bio: string }).bio = text; return d } },
 })
@@ -36,7 +36,7 @@ describe('generateSkillDraft', () => {
     expect((d.payload as { bio: string }).bio).toBe('AI wrote this.')
     const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit]
     expect(url).toBe('/api/ai/draft')
-    expect(JSON.parse(String(init.body))).toEqual({ kind: 'bio', input: { x: 1 } }) // no prompt, no model, no key
+    expect(JSON.parse(String(init.body))).toEqual({ kind: 'bio', input: { x: 1 }, skillId: 'profile-completion' }) // no prompt, no model, no key
   })
 
   it.each([

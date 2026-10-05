@@ -70,7 +70,7 @@ describe('draft traces', () => {
     expect(d.source).toBe('ai')
     const t = traceStore.get().traces[0]!
     expect(t.outcome).toBe('ai')
-    expect(t.steps.map((s) => s.id)).toEqual(['input', 'mask', 'injection', 'safety', 'scope', 'agent', 'server', 'llm', 'output'])
+    expect(t.steps.map((s) => s.id)).toEqual(['input', 'action', 'mask', 'injection', 'safety', 'scope', 'agent', 'server', 'llm', 'output'])
     expect(t.steps.find((s) => s.id === 'server')!.detail).toMatch(/Masked email 1/)
     expect(t.steps.find((s) => s.id === 'llm')).toMatchObject({ status: 'pass' })
     expect(t.steps.every((s) => s.status !== 'pending')).toBe(true)
@@ -82,5 +82,27 @@ describe('draft traces', () => {
     const t = traceStore.get().traces[0]!
     expect(t.outcome).toBe('template')
     expect(t.steps.find((s) => s.id === 'llm')).toMatchObject({ status: 'warn' })
+  })
+})
+
+describe('a guided template draft (no AI task)', () => {
+  const tpl = (skillId: string) => ({ skillId, model: 'haiku-4-5' as const, instruction: '', mockDraft: { summary: 'Complete 1 profile field', changes: [], payload: {} } })
+
+  it('records input, the action check, the skipped text checks, agent, a skipped LLM and the output', async () => {
+    const d = await generateSkillDraft(tpl('profile-completion') as never)
+    expect(d.source).toBe('mock')
+    const t = traceStore.get().traces[0]!
+    expect(t.outcome).toBe('template')
+    expect(t.steps.map((s) => s.id)).toEqual(['input', 'action', 'text', 'agent', 'llm', 'output'])
+    expect(t.steps.find((s) => s.id === 'action')).toMatchObject({ status: 'pass' })
+    expect(t.steps.find((s) => s.id === 'llm')).toMatchObject({ status: 'skip' })
+  })
+
+  it('blocks an unknown skill and says so in the trace', async () => {
+    const d = await generateSkillDraft(tpl('delete-everything') as never)
+    expect(d.note).toMatch(/Blocked by guardrails/)
+    const t = traceStore.get().traces[0]!
+    expect(t.outcome).toBe('blocked')
+    expect(t.steps.find((s) => s.id === 'action')).toMatchObject({ status: 'block' })
   })
 })

@@ -163,6 +163,28 @@ export function guardChat(text: string): GuardResult<string> {
 }
 
 export { maskTotal }
+export { KNOWN_ACTIONS, validateAction, validateSkill } from './actions.ts'
+
+export interface UntrustedResult {
+  /** The text to use: neutralized, profanity starred. Empty when it was flagged. */
+  text: string
+  flagged?: 'injection' | 'safety'
+  detail?: string
+}
+
+/**
+ * For text that did not come from the user's own typing: reviews, scraped page text, listing text, tool results. It is data, never
+ * instructions, so an injection or unsafe content is dropped (flagged) instead of failing the whole run. No masking: this is not the
+ * user's own input, and masking would change what a page actually says.
+ */
+export function guardUntrusted(text: string): UntrustedResult {
+  const inj = detectInjection(text)
+  if (inj.level === 'block') return { text: '', flagged: 'injection', detail: inj.matches.map((m) => m.id).join(', ') }
+  const out = neutralizeDelimiters(text)
+  const safe = checkSafety(out)
+  if (safe.category) return { text: '', flagged: 'safety', detail: safe.category }
+  return { text: safe.text }
+}
 
 /** One short sentence about what was masked, for the notice under a draft or chat message. */
 export function maskNotice(c: MaskCounts): string {

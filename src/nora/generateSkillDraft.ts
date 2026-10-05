@@ -1,4 +1,4 @@
-import { guardInput } from '../guardrails'
+import { guardInput, validateAction, validateSkill } from '../guardrails'
 import { startTrace, type TraceHandle } from '../guardrails/trace'
 import { AI_TASKS } from '../profile/aiTasks'
 import type { Draft, DraftRequest } from '../skills/types'
@@ -39,7 +39,7 @@ async function askServer(request: DraftRequest, opts: GenerateOptions, tr: Trace
     const res = await fetchImpl('/api/ai/draft', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ kind: ai.kind, input: ai.input }),
+      body: JSON.stringify({ kind: ai.kind, input: ai.input, skillId: request.skillId }),
       signal: controller.signal,
     })
     if (!res.ok) {
@@ -88,6 +88,14 @@ export async function generateSkillDraft(request: DraftRequest, opts: GenerateOp
     const tr = startTrace('draft', label)
     tr.add({ id: 'input', stage: 'input', label: 'Input', status: 'pass', detail: `${label} requested from "${request.skillId}"` })
     // the same guardrails run here first, so a blocked input gets its message at once and never leaves the browser
+    const action = validateAction(request.skillId, request.ai.kind)
+    tr.add({ id: 'action', stage: 'guardrails', label: 'Action allow-list (browser)', status: action.ok ? 'pass' : 'block', detail: action.ok ? `${request.skillId} may request a ${request.ai.kind} draft` : action.message })
+    if (!action.ok) {
+      tr.add({ id: 'llm', stage: 'llm', label: 'LLM', status: 'skip', detail: 'Not called: the action is not allowed' })
+      tr.add({ id: 'output', stage: 'output', label: 'Output', status: 'block', detail: action.message })
+      tr.finish('blocked')
+      return { ...structuredClone(request.mockDraft), source: 'mock', note: `Blocked by guardrails: ${action.message}` }
+    }
     const guard = guardInput(request.ai.kind, request.ai.input)
     for (const c of guard.checks) tr.add({ id: c.id, stage: 'guardrails', label: `${c.label} (browser)`, status: c.status, detail: c.detail })
     tr.add({ id: 'agent', stage: 'agent', label: 'Agent builds the request', status: guard.allowed ? 'pass' : 'skip', detail: guard.allowed ? `Skill ${request.skillId}, model ${request.model}. Only the task kind and facts are sent` : 'Not run: blocked by the guardrails' })
@@ -112,6 +120,24 @@ export async function generateSkillDraft(request: DraftRequest, opts: GenerateOp
     note = result
     tr.update('output', { status: result.startsWith('Blocked') ? 'block' : 'info', detail: `Template shown, labelled with the reason: ${result}` })
     tr.finish(result.startsWith('Blocked') ? 'blocked' : 'template')
+  }
+  else {
+    // a guided skill with no AI task still gets a trace, so the Flow panel shows what ran and what did not apply
+    const tr = startTrace('draft', request.mockDraft.summary || request.skillId)
+    tr.add({ id: 'input', stage: 'input', label: 'Input', status: 'pass', detail: `Draft requested from "${request.skillId}" by a button, nothing typed` })
+    const skill = validateSkill(request.skillId)
+    tr.add({ id: 'action', stage: 'guardrails', label: 'Action allow-list (browser)', status: skill.ok ? 'pass' : 'block', detail: skill.ok ? `${request.skillId} is a known skill` : skill.message })
+    if (!skill.ok) {
+      tr.add({ id: 'llm', stage: 'llm', label: 'LLM', status: 'skip', detail: 'Not called: the action is not allowed' })
+      tr.add({ id: 'output', stage: 'output', label: 'Output', status: 'block', detail: skill.message })
+      tr.finish('blocked')
+      return { ...structuredClone(request.mockDraft), source: 'mock', note: `Blocked by guardrails: ${skill.message}` }
+    }
+    tr.add({ id: 'text', stage: 'guardrails', label: 'Mask, injection, safety, scope', status: 'skip', detail: 'No typed text. The draft uses your saved profile fields and fixed rules, so there is nothing to check' })
+    tr.add({ id: 'agent', stage: 'agent', label: 'Agent builds the draft', status: 'pass', detail: `Skill ${request.skillId} fills the change from your profile data with fixed rules` })
+    tr.add({ id: 'llm', stage: 'llm', label: 'LLM', status: 'skip', detail: 'Not called: this skill uses a template, not the AI model' })
+    tr.add({ id: 'output', stage: 'output', label: 'Output', status: 'info', detail: 'Before and after shown. Nothing is saved until you approve' })
+    tr.finish('template')
   }
   await new Promise((r) => setTimeout(r, latencyMs))
   return { ...structuredClone(request.mockDraft), source: 'mock', note }

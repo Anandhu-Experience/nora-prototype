@@ -2,6 +2,175 @@ import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { connect } from "node:tls";
 
+//#region src/guardrails/injection.ts
+const BLOCK_AT = 5;
+const WARN_AT = 2;
+const SIGNALS = [
+	{
+		id: "override",
+		weight: 5,
+		re: /\b(ignore|disregard|forget|override|bypass|skip)\b.{0,40}\b(previous|prior|above|earlier|all|any|your|the)\b.{0,30}\b(instructions?|rules?|prompts?|guidelines?|polic(?:y|ies)|restrictions?)/i
+	},
+	{
+		id: "prompt-leak",
+		weight: 5,
+		re: /\b(reveal|show|print|repeat|leak|display|output|tell me)\b.{0,30}\b(system|hidden|initial|original|secret)\b.{0,15}\b(prompt|instructions?|message|rules)/i
+	},
+	{
+		id: "role-switch",
+		weight: 5,
+		re: /\byou are now\b|\b(act|behave|respond) as\b.{0,30}\b(dan|jailbroken|unfiltered|unrestricted|no restrictions|developer mode)\b|\bdo anything now\b/i
+	},
+	{
+		id: "jailbreak",
+		weight: 5,
+		re: /\bjailbreak(?:ed)?\b|\bdeveloper mode\b|\bDAN mode\b/i
+	},
+	{
+		id: "fence-break",
+		weight: 5,
+		re: /<\/?\s*(profile|client_reviews|review|context|topic|question|existing_copy)\b[^>]*>/i
+	},
+	{
+		id: "role-marker",
+		weight: 4,
+		re: /^\s*(system|assistant|developer)\s*:|\[\/?INST\]|###\s*(?:system|instruction)/im
+	},
+	{
+		id: "chat-template-token",
+		weight: 5,
+		re: /<\|im_(?:start|end)\|>|<\|(?:system|user|assistant)\|>/i
+	},
+	{
+		id: "new-instructions",
+		weight: 4,
+		re: /\bnew (instructions?|rules?|task|objective)\s*:/i
+	},
+	{
+		id: "secret-exfil",
+		weight: 5,
+		re: /\b(api[_ -]?key|secret|password|token|credentials?)\b.{0,30}\b(send|show|print|reveal|give|share|what is)\b|\b(send|show|print|reveal|give|share)\b.{0,30}\b(api[_ -]?key|secret|password|token|credentials?)\b/i
+	},
+	{
+		id: "send-to-url",
+		weight: 3,
+		re: /\b(send|post|email|upload)\b.{0,40}\b(to|at)\s+https?:\/\//i
+	},
+	{
+		id: "other-language",
+		weight: 5,
+		re: /ignora(?:r)? (?:las |todas las )?instrucciones (?:anteriores|previas)|ignorez? (?:les |toutes les )?instructions (?:précédentes|precedentes)|ignoriere (?:alle )?(?:vorherigen|bisherigen) anweisungen/i
+	},
+	{
+		id: "hidden-text",
+		weight: 3,
+		re: /[​-‏⁠﻿]|[\u{E0000}-\u{E007F}]/u
+	},
+	{
+		id: "encoded-blob",
+		weight: 3,
+		re: /[A-Za-z0-9+/]{80,}={0,2}/
+	},
+	{
+		id: "run-command",
+		weight: 3,
+		re: /\b(execute|run)\b.{0,20}\b(command|script|shell|code|sql)\b/i
+	},
+	{
+		id: "destructive-command",
+		weight: 5,
+		re: /\brm\s+-rf\b|\bdrop\s+table\b|\bcurl\s+https?:|\bwget\s+https?:/i
+	},
+	{
+		id: "soft-framing",
+		weight: 2,
+		re: /\b(pretend|imagine|hypothetically)\b.{0,40}\b(no rules|ignore|without restrictions|you can)\b/i
+	}
+];
+function detectInjection(text) {
+	const matches = SIGNALS.filter((s) => s.re.test(text)).map((s) => ({
+		id: s.id,
+		weight: s.weight
+	}));
+	const score = matches.reduce((n, m) => n + m.weight, 0);
+	return {
+		score,
+		level: score >= 5 ? "block" : score >= 2 ? "suspicious" : "none",
+		matches
+	};
+}
+/** Rewrites the tags our prompts use as fences, so untrusted text cannot close one. Applied to everything, blocked or not. */
+const neutralizeDelimiters = (text) => text.replace(/<(\/?)\s*(profile|client_reviews|review|context|topic|question|existing_copy)\b([^>]*)>/gi, "‹$1$2$3›").replace(/[​-‏⁠﻿]/g, "");
+
+//#endregion
+//#region src/guardrails/safety.ts
+const GROUPS = "black|blacks|whites?|asians?|hispanics?|latinos?|latinas?|jews|jewish|muslims?|christians?|hindus?|immigrants?|foreigners?|gays?|lesbians?|trans|disabled|women|men|minorit(?:y|ies)|single mothers?|pregnant|families with kids";
+const RULES = [
+	{
+		category: "threat",
+		re: /\b(i(?:'| a)?m going to|i will|i'll|gonna|we will|we'll)\s+(?:find|hunt|track|come after|get)\b.{0,20}\b(you|him|her|them)\b.{0,25}\b(hurt|kill|harm|make you pay)\b|\b(i(?:'| a)?m going to|i will|i'll|gonna|we will|we'll|someone should)\s+(?:kill|hurt|harm|shoot|stab|beat|destroy|burn)\b.{0,25}\b(you|him|her|them|your|family|office)\b|\b(kill|murder|shoot|stab)\s+(you|him|her|them)\b|\bbomb threat\b/i
+	},
+	{
+		category: "hate",
+		re: new RegExp(`\\b(?:inferior|subhuman|vermin|scum|filthy)\\b.{0,30}\\b(?:race|religion|people|${GROUPS})\\b|\\b(?:all|those|these)\\s+(?:the\\s+)?(?:${GROUPS})\\s+(?:are|should)\\b.{0,40}\\b(?:inferior|vermin|scum|subhuman|animals|die|deported)`, "i")
+	},
+	{
+		category: "sexual",
+		re: /\b(porn\w*|nude|naked|erotic|sex(?:ual)? (?:act|scene|story)|explicit sex)\b/i
+	},
+	{
+		category: "self-harm",
+		re: /\b(kill myself|end my life|suicid(?:e|al)|self[- ]harm|want to die|hurt myself)\b/i
+	},
+	{
+		category: "fraud",
+		re: /\b(?:fake|forge[d]?|falsif\w+|counterfeit|doctor(?:ed)?)\s+(?:the\s+|my\s+|a\s+)?(?:pay ?stubs?|bank statements?|w-?2s?|tax returns?|income|documents?|id|identity|signatures?)\b|\blaunder\w*\b.{0,15}\bmoney|\bmoney.{0,10}launder|\bstraw (?:buyer|purchase)|\bhide\b.{0,20}\b(?:income|debts?|assets)\b.{0,25}\b(?:lender|underwriter|bank)|\bidentity theft\b|\bsteal\w* (?:an? )?identit/i
+	},
+	{
+		category: "discrimination",
+		re: new RegExp(`\\b(?:don'?t|do not|won'?t|will not|never|refuse to|no)\\s+(?:lend|sell|rent|finance|approve|serve|work with)\\b.{0,25}\\b(?:${GROUPS})\\b|\\b(?:only|just)\\s+(?:show|sell|lend)\\b.{0,25}\\b(?:${GROUPS})\\b|\\bavoid (?:areas|neighbou?rhoods)\\b.{0,30}\\b(?:${GROUPS})\\b`, "i")
+	}
+];
+const PROFANITY = /\b(?:fuck\w*|shit\w*|bitch\w*|asshole\w*|bastard\w*|dickhead\w*|bullshit)\b/gi;
+function checkSafety(text) {
+	const hit = RULES.find((r) => r.re.test(text));
+	let profanity = 0;
+	const cleaned = text.replace(PROFANITY, () => {
+		profanity++;
+		return "****";
+	});
+	return {
+		category: hit?.category,
+		text: cleaned,
+		profanity
+	};
+}
+
+//#endregion
+//#region src/guardrails/index.ts
+/**
+* For text that did not come from the user's own typing: reviews, scraped page text, listing text, tool results. It is data, never
+* instructions, so an injection or unsafe content is dropped (flagged) instead of failing the whole run. No masking: this is not the
+* user's own input, and masking would change what a page actually says.
+*/
+function guardUntrusted(text) {
+	const inj = detectInjection(text);
+	if (inj.level === "block") return {
+		text: "",
+		flagged: "injection",
+		detail: inj.matches.map((m) => m.id).join(", ")
+	};
+	const out = neutralizeDelimiters(text);
+	const safe = checkSafety(out);
+	if (safe.category) return {
+		text: "",
+		flagged: "safety",
+		detail: safe.category
+	};
+	return { text: safe.text };
+}
+
+//#endregion
 //#region server/siteAudit.ts
 function isPrivateIp(ip) {
 	const v = ip.toLowerCase();
@@ -298,20 +467,36 @@ function createSiteAuditHandler(deps = {}) {
 				})
 			]);
 			const p = parseHtml(html);
+			const flagged = [];
+			const clean = (label, v) => {
+				if (!v) return v;
+				const r = guardUntrusted(v);
+				if (!r.flagged) return r.text;
+				flagged.push(label);
+				notes.push(`The page's ${label} ${r.flagged === "injection" ? "looked like instructions to an AI" : "contained unsafe content"}, so it was ignored.`);
+				return "";
+			};
+			const page = {
+				title: clean("title", p.title),
+				description: clean("meta description", p.description),
+				robots: clean("robots tag", p.robots),
+				og: clean("Open Graph tags", p.og),
+				twitter: clean("Twitter card", p.twitter)
+			};
 			return {
 				status: 200,
 				body: {
 					url: finalUrl,
 					fetchedAt: new Date(now()).toISOString(),
 					page: {
-						title: p.title,
-						description: p.description,
-						robots: p.robots,
+						title: page.title,
+						description: page.description,
+						robots: page.robots,
 						language: p.language,
 						charset: p.charset,
-						og: p.og,
+						og: page.og,
 						google: p.google,
-						twitter: p.twitter
+						twitter: page.twitter
 					},
 					nap: matchNap(p.text, nap),
 					reviews: {
@@ -333,7 +518,8 @@ function createSiteAuditHandler(deps = {}) {
 						performance: psi.performance,
 						issues: psi.issues
 					} : null,
-					notes
+					notes,
+					flagged
 				}
 			};
 		} catch (e) {

@@ -8,23 +8,23 @@ npm run dev      # http://localhost:5173  (redirects to /login until you sign in
 npm test         # engine, skills, mock layer, profile store, auth
 ```
 
-**Sign in** with the demo account (there is a *Fill demo credentials* button on the login page): `arjunan@newamerican.example` / `demo1234`. Authentication is a mock: one hard-coded account and a flag in `localStorage` (`nora-auth`), so it is not real security. Signing in makes NORA greet you in the centre of the screen after about 5 seconds; *Sign out* (avatar menu) returns to `/login`. Every route except `/login` requires the session.
+**Sign in** with the demo account (there is a *Fill demo credentials* button on the login page): `arjunan@newamerican.example` / `demo1234`. Authentication is a mock: one hard-coded account and a flag in `localStorage` (`nora-auth`), so it is not real security. *Sign out* (avatar menu) returns to `/login`. Every route except `/login` requires the session.
 
 ## Look and feel
 
-A labelled left sidebar of the product modules (a drawer on phones) and a top bar with `⌘K` search, **Ask NORA**, Reset demo, a light/dark switch, notifications and the account menu. Messages and Notifications are in the top bar and account menu, not the sidebar.
+A labelled left sidebar of the product modules (a drawer on phones) and a top bar with `⌘K` search, Reset demo, a light/dark switch, notifications and the account menu. Messages and Notifications are in the top bar and account menu, not the sidebar.
 
 **Theme:** every colour is a CSS variable (`tailwind.config.js`), so dark mode is a variable remap, not per-component `dark:` classes. The choice is saved in `localStorage` (`nora-theme`). Restart `npm run dev` after editing `tailwind.config.js`.
 
 ## NORA
 
-NORA greets you **in the centre of the screen about 5 seconds after you log in** (once per browser session; `GREET_DELAY_MS` in `NoraContext.tsx`). Until then the top bar's **Ask NORA** button opens it any time; opening or minimizing it yourself first cancels the greeting. *Reset demo* brings it up immediately.
+When you land on the app, suggestions appear as action cards **above the round floating NORA button** in the bottom-right corner (they rise in with a short animation and the button bobs). On a page with its own *NORA suggests* strip these are that page's suggestions, and clicking one does its action (open a form, go to a page, draft with AI). On other pages they are the issues NORA found, and clicking one opens NORA in the centre of the screen with that skill selected. The × hides them on that page for the session. The button opens NORA any time. *Reset demo* brings NORA up immediately.
 
 NORA also appears after the same wait when you **switch to a different person's profile** (it is about to be asked about them, and the greeting says whose profile you are viewing). Opening or minimizing it yourself first cancels that, a second switch restarts the wait, and ordinary page navigation does nothing. It is chat-first:
 
 - **Hello {name}**, then **what NORA found**: one numbered action card per applicable skill, in ranked order, each with tags, the expected outcome (e.g. profile completeness 85% → 100%) and *View Analysis* / *Review with NORA*.
 - **⚡ quick actions** and a **message box** are hidden behind footer icons; below them a self-advancing slider of tool chips (pauses on hover, drag or swipe, and with reduced motion).
-- **Minimize** (—), Esc or a click outside minimizes NORA. The top bar's **Ask NORA** button shows a spinner while it works and a red dot when it needs you, and brings it back.
+- **Minimize** (—), Esc or a click outside minimizes NORA. The floating NORA button shows a spinner while it works and a red dot when it needs you, and brings it back.
 - **Stop** appears while NORA is reading, validating or drafting. It discards the run, changes nothing and brings the proposal back. It is not offered once NORA is writing.
 - **Focus mode:** while NORA works, the rest of the app dims and blurs and NORA glows.
 - **Fix with NORA** links (Insights, the profile summary banner, the completeness figure) bring NORA up, select the matching action, start it, and narrate in the chat: *On it…*, *The draft is ready…*, *Done. …* or *Stopped.*
@@ -86,6 +86,17 @@ Everything a person types or pastes goes through four checks before it reaches t
 4. **Scope validation:** article topics and FAQ questions must be about mortgage or home finance (strict); NORA chat only refuses clearly unrelated requests (lenient).
 
 They run in the draft handler (`server/aiDraft.ts`, authoritative: a blocked request answers 422 `guardrail_blocked` and never reaches the model), in the browser before a draft request, and in NORA chat. A bad review snippet is dropped from a bio request instead of blocking it. **Flow trace:** the **Flow** button in the top bar (and *View steps* under a NORA answer) opens a panel with every chat message and AI draft as a run: input, the four guardrail checks, the agent, the server's second check, the LLM and the output, each with a status and a time. It updates live while a run is in progress and keeps the last 30 (`src/guardrails/trace.ts`). Chat shows the LLM step as skipped, because NORA's chat answers are rule-based. Try it: ask NORA "Write a poem", paste a phone number into the chat, or write an article about pasta. Limits: rules, not a trained classifier, English only; it checks input, not what the model writes.
+
+**When NORA has no input box (guided design).** Guardrails protect every place untrusted data enters, not only a chat box:
+
+| Entry point | Check |
+|---|---|
+| Button and skill ids sent to the draft endpoint | Action allow-list (`src/guardrails/actions.ts`): an unknown skill or a kind it may not request answers 400 `invalid_action` before any model call. A test fails if a skill in the registry is missing from the list |
+| The user's own profile text used as AI facts | The four checks above |
+| Third-party text (reviews, scanned website title, description and tags) | `guardUntrusted`: text that tries to instruct an AI, or is unsafe, is blanked and reported in the scan's `flagged` list and notes instead of failing the scan; hidden characters are stripped |
+| Any remaining free text field | `guardInput` / `guardChat` as before |
+
+The Flow panel shows an **Action allow-list** step for each draft. With nothing typed, output checks (compliance, groundedness, output masking) become the main safety layer; they are not built yet.
 
 ## Live website scan (Web Analytics)
 

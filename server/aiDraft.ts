@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { guardInput } from '../src/guardrails/index.ts'
+import { guardInput, validateAction } from '../src/guardrails/index.ts'
 import { AI_TASKS, ARTICLE_TITLE_MAX, MODEL_CAPS, SERVICE_TAGLINE_MAX, isAiTaskKind, type AgentFacts, type AiTaskKind, type ArticleInput, type BioInput, type FaqInput, type MetaInput, type ModelId, type ReplyInput, type ServiceInput } from '../src/profile/aiTasks.ts'
 
 /**
@@ -274,8 +274,11 @@ export function createAiDraftHandler(opts: HandlerOptions = {}) {
 
   return async function handle(body: unknown): Promise<DraftResult> {
     if (typeof body !== 'object' || body === null) return { status: 400, body: { error: 'bad_request' } }
-    const { kind, input } = body as { kind?: unknown; input?: unknown }
+    const { kind, input, skillId } = body as { kind?: unknown; input?: unknown; skillId?: unknown }
     if (!isAiTaskKind(kind)) return { status: 400, body: { error: 'unknown_task' } }
+    // guided NORA has no text to refuse, so the action itself is checked against the allow-list
+    const action = validateAction(skillId, kind)
+    if (!action.ok) return { status: 400, body: { error: 'invalid_action', guardrail: { method: 'action', code: action.code, message: action.message } } }
     const parsers = { bio: parseBioInput, 'review-reply': parseReplyInput, service: parseServiceInput, meta: parseMetaInput, article: parseArticleInput, faq: parseFaqInput } as const
     const parsed = parsers[kind](input)
     if (!parsed) return { status: 400, body: { error: 'invalid_input' } }

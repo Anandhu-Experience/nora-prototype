@@ -1,6 +1,7 @@
 import { lookup as dnsLookup } from 'node:dns/promises'
 import { isIP } from 'node:net'
 import { connect as tlsConnect } from 'node:tls'
+import { guardUntrusted } from '../src/guardrails/index.ts'
 
 /**
  * Server half of the Web Analytics scan: POST /api/seo/audit { url, nap? }.
@@ -24,6 +25,8 @@ export interface AuditResult {
   lighthouse: { seo: number | null; performance: number | null; issues: { id: string; title: string }[] } | null
   /** Anything that could not be checked, in plain words. */
   notes: string[]
+  /** Page fields that were blanked because they looked like instructions to an AI or held unsafe content. */
+  flagged: string[]
 }
 
 export interface AuditDeps {
@@ -260,16 +263,28 @@ export function createSiteAuditHandler(deps: AuditDeps = {}) {
         pageSpeed(finalUrl, env.PAGESPEED_API_KEY, fetchImpl).catch((e: Error) => { notes.push(`Load time could not be measured: ${e.message}.`); return null }),
       ])
       const p = parseHtml(html)
+      // Text read from a page is data, never instructions: anything that tries to steer an AI, or is unsafe, is blanked and reported.
+      const flagged: string[] = []
+      const clean = (label: string, v: string): string => {
+        if (!v) return v
+        const r = guardUntrusted(v)
+        if (!r.flagged) return r.text
+        flagged.push(label)
+        notes.push(`The page's ${label} ${r.flagged === 'injection' ? 'looked like instructions to an AI' : 'contained unsafe content'}, so it was ignored.`)
+        return ''
+      }
+      const page = { title: clean('title', p.title), description: clean('meta description', p.description), robots: clean('robots tag', p.robots), og: clean('Open Graph tags', p.og), twitter: clean('Twitter card', p.twitter) }
       const result: AuditResult = {
         url: finalUrl,
         fetchedAt: new Date(now()).toISOString(),
-        page: { title: p.title, description: p.description, robots: p.robots, language: p.language, charset: p.charset, og: p.og, google: p.google, twitter: p.twitter },
+        page: { title: page.title, description: page.description, robots: page.robots, language: p.language, charset: p.charset, og: page.og, google: p.google, twitter: page.twitter },
         nap: matchNap(p.text, nap),
         reviews: { widget: p.widget || p.schemaReviews.present, schema: p.schemaReviews.present, count: p.schemaReviews.count },
         security: { ssl: tls.ssl, expires: tls.expires, httpsRedirect: redirect },
         load: { seconds: psi?.seconds ?? null, source: psi?.seconds != null ? 'pagespeed' : null },
         lighthouse: psi ? { seo: psi.seo, performance: psi.performance, issues: psi.issues } : null,
         notes,
+        flagged,
       }
       return { status: 200, body: result }
     } catch (e) {
