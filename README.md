@@ -89,6 +89,21 @@ The **NORA OS** sidebar item (`/nora-os`) keeps every issue in one place. Nothin
 - **Resolved:** the first time an issue is seen and the time it disappeared are kept in the browser (`nora-presence-os-v1`, cleared by Reset demo). An always-on hook in the layout stamps them, so the time is when it was fixed, not when the page was opened.
 - **NORA activity:** what NORA did this session and which skills it handled. Clicking a resolved issue that a NORA skill fixed opens this tab filtered to that skill, and clicking a skill in *Skills handled* filters the log to it (*Show all* clears it).
 
+## V3 overview (capability-first)
+
+`/profile` is organised around the professional (`docs/srp-v3-ui-audit.md` has the audit and the status). It shows the header, **one** Search Rank Score summary (value, band, rank, points to the next rank, link to *why*), a **Next best action** (current state, problem, action, expected impact), and **Your presence, by capability**: Identity, Local Presence, Reputation, Discoverability and Content & Insights, each with its health and its top issue. Recent activity and the review cards follow.
+
+- **One issue list** (`collectIssues`) feeds the overview, NORA OS and the floating NORA button, so they always agree. Each issue has a capability, a priority, and the points and rank effect of fixing it, priced with the live score's own `simulate` (no separate estimate). Recommendations come from real state, never from hardcoded text.
+- **Capability health** (`presence/capabilities.ts`) creates no scores: it reuses the score's drivers, the profile completeness rules, review counts and the content authority score.
+- **Name, phone and hours** are compared across the profile, the listing and the website scan (`presence/nap.ts`). A mismatch becomes a high-priority issue; **Review Issue** opens the existing listing fix with the profile's value, and it applies only when you click Apply. Nothing is copied behind your back.
+- The Search Rank page shows, for each driver, what earned its points and what is missing. Profile page views come from the Insights traffic series everywhere.
+
+## Output compliance and score prediction (from the SRP agentic architecture doc)
+
+- **Output compliance** (`src/guardrails/compliance.ts`): what the model writes is checked before it reaches you, with deterministic mortgage rules first: rate or APR claims, payment examples and guarantees (blocked), Fair Housing wording (blocked), unproven "best rates" claims and client deal details (flagged). A blocked draft is replaced by the labelled template with the reason; a flagged one is shown with a note, and every write still needs your approval. The server checks the model's text, and your own edits to a reply are checked the same way (the **Post reply** button is disabled while an edit breaks a rule). The Flow trace has an *Output compliance* step. A classifier pass for what rules cannot see is not built. These rules are for planning and need legal review.
+- **Score prediction** (`simulate` in `src/presence/srs.ts`): NORA prices a skill's change in the Search Rank Score before it runs (*Search Rank Score 506 → 536 +30* on the proposal card), using the same maths as the live score on a copy of the data. After the write, the Flow trace compares *predicted vs actual* in the evals. Skills declare the change with `scoreChange`.
+- **Score bands** (Poor 0 to 349, Fair 350 to 499, Good 500 to 649, Excellent 650 to 850) show on the Search Rank page and NORA OS. Each public reply now adds 1 point to Reviews (up to 75, capped at 300 with the rest); V2 scores replies but the value is assumed. Not adopted from the doc: recent reviews lapsing after 365 days, because it would drop the demo score by over 100 points.
+
 ## Input guardrails
 
 Everything a person types or pastes goes through four checks before it reaches the AI model or NORA (`src/guardrails/`, plain TypeScript with no dependencies and no cost, shared by the server and the browser):

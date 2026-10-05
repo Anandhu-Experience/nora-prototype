@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
-import { agentCompleteness, recommendedActions } from '../profile/selectors'
+import { agentCompleteness, agentGaps, recommendedActions } from '../profile/selectors'
 import type { Agent } from '../profile/types'
 import { CONNECTIONS, connectionsPoints, connectionsStore, isConnected, missingConnections } from './connections'
-import { dataIssues, listingsStore, listingsSummary } from './listings'
+import { FIELD_LABEL, dataIssues, listingsStore, listingsSummary, proposeFix, type InfoField } from './listings'
+import { napConflicts, napLabel } from './nap'
 import { networkStore } from './network'
 import { createStore, nowIso, subscribeAllPresence } from './persist'
 import { authorityScore, publishedCount, voceStore, voceSuggestions } from './voce'
+import { simulate, type SimChange } from './srs'
 import { websiteIssues, websiteStore, WEBSITE_MAX, websitePoints } from './website'
 
 /**
@@ -17,14 +19,24 @@ export type OsModule = 'Profile' | 'Connections' | 'Listings' | 'Web Analytics' 
 export const OS_MODULES: OsModule[] = ['Profile', 'Connections', 'Listings', 'Web Analytics', 'Reviews', 'AI Visibility', 'Network']
 export type Severity = 'high' | 'medium' | 'low'
 
+/** The five V3 capability areas every issue belongs to. */
+export type CapabilityId = 'identity' | 'local' | 'reputation' | 'discoverability' | 'content'
+export const CAPABILITY_OF: Record<OsModule, CapabilityId> = { Profile: 'identity', Connections: 'local', Listings: 'local', 'Web Analytics': 'discoverability', Reviews: 'reputation', 'AI Visibility': 'content', Network: 'content' }
+
 export interface OsIssue {
   /** Stable across renders, so the same issue is recognised when it is seen again or resolves. */
   id: string
   module: OsModule
   title: string
   detail: string
+  /** The capability area this belongs to. */
+  capability: CapabilityId
   /** Points it would earn, or a short note. */
   impact?: string
+  /** Search Rank Score points the fix is worth, priced with the same maths as the live score. */
+  points?: number
+  /** Rank effect of the fix, when it moves the professional up. */
+  rank?: { from: number; to: number; of: number }
   severity: Severity
   /** Where the user goes to fix it. */
   to: string
@@ -35,9 +47,11 @@ export interface OsIssue {
 
 const unreplied = (a: Agent) => a.reviews.filter((r) => !r.reply?.trim())
 
+type RawIssue = Omit<OsIssue, 'capability'>
+
 /** Everything that needs attention right now, most important first. */
 export function collectIssues(a: Agent): OsIssue[] {
-  const out: OsIssue[] = []
+  const out: RawIssue[] = []
 
   const conns = connectionsStore.get()
   for (const m of missingConnections(conns)) {
@@ -48,16 +62,19 @@ export function collectIssues(a: Agent): OsIssue[] {
     })
   }
 
+  // high only when the gap is one the completeness figure counts; the rest strengthen the profile without moving it
+  const counted = new Set(agentGaps(a))
+  const COUNTED: Record<string, string> = { photo: 'photoUrl', specialties: 'specialties', bio: 'bio' }
   for (const r of recommendedActions(a)) {
     out.push({
       id: `profile:${r.id}`, module: 'Profile', title: r.title, detail: r.description,
-      severity: r.id === 'specialties' || r.id === 'bio' ? 'high' : 'medium',
+      severity: COUNTED[r.id] && counted.has(COUNTED[r.id]!) ? 'high' : 'medium',
       to: '/profile', cta: r.id === 'specialties' ? 'Fix with NORA' : r.cta, nora: r.id === 'specialties' ? 'profile' : undefined,
     })
   }
 
   const listings = listingsStore.get()
-  for (const i of dataIssues(listings.info)) out.push({ id: `listing:${i.id}`, module: 'Listings', title: `Fix listing data: ${i.id}`, detail: i.message, impact: `+${i.points} pts`, severity: 'high', to: '/listings', cta: 'Open Listings' })
+  for (const i of dataIssues(listings.info)) out.push({ id: `listing:${i.id}`, module: 'Listings', title: `Fix listing data: ${FIELD_LABEL[i.id].toLowerCase()}`, detail: i.message, impact: `+${i.points} pts`, severity: 'high', to: '/listings', cta: 'Open Listings' })
   for (const site of listings.sites.filter((x) => x.status === 'failed')) out.push({ id: `listing-site:${site.id}`, module: 'Listings', title: `${site.name} did not publish`, detail: site.note || 'The directory rejected the listing. Check the business details and try again.', severity: 'medium', to: '/listings', cta: 'Open Listings' })
 
   const web = websiteStore.get()
@@ -73,8 +90,36 @@ export function collectIssues(a: Agent): OsIssue[] {
 
   for (const q of networkStore.get().requests.filter((x) => x.status === 'pending')) out.push({ id: `net:${q.id}`, module: 'Network', title: `${q.name} wants to be a partner`, detail: `${q.title}, ${q.city}. Accept or decline the request.`, severity: 'low', to: '/network', cta: 'Open Network' })
 
+  for (const c of napConflicts(a)) {
+    out.push({
+      id: `nap:${c.id}`, module: c.where === 'Listings' ? 'Listings' : 'Web Analytics', title: `Your ${napLabel(c)} does not match your profile`,
+      detail: `Profile: ${c.profile}. ${c.where}: ${c.other}. Mismatched details hurt local search.`, impact: 'Keeps your details consistent', severity: 'high',
+      to: c.fixField ? `/listings?fix=${c.fixField}` : c.where === 'Listings' ? '/listings' : '/analytics', cta: 'Review Issue',
+    })
+  }
+
   const rank: Record<Severity, number> = { high: 0, medium: 1, low: 2 }
-  return out.sort((x, y) => rank[x.severity] - rank[y.severity])
+  return out.map((i) => price(a, { ...i, capability: CAPABILITY_OF[i.module] })).sort((x, y) => rank[x.severity] - rank[y.severity] || Number(y.id.startsWith('nap:')) - Number(x.id.startsWith('nap:')) || (y.points ?? 0) - (x.points ?? 0))
+}
+
+/** What the issue's fix changes, in the terms the score reads, or null when it does not move the score. */
+function changeFor(id: string, a: Agent): SimChange | null {
+  if (id.startsWith('conn:')) return { connect: [id.slice(5) as never] }
+  if (id.startsWith('review:')) return { reply: [id.slice(7)] }
+  if (id === 'profile:specialties') return { profile: { specialties: Array.from({ length: 5 }, (_, i) => a.specialties[i] ?? `specialty ${i}`) } }
+  if (id === 'profile:bio') return { profile: { about: a.about.trim() ? a.about : 'bio' } }
+  if (id === 'profile:photo') return { profile: { photoUrl: a.photoUrl || 'photo' } }
+  if (id.startsWith('listing:')) { const f = id.slice(8) as InfoField; return { listingInfo: { [f]: proposeFix(f).value } } }
+  return null
+}
+
+/** Add the score the fix is worth, priced with the live score's own maths (never a separate estimate). */
+function price(a: Agent, issue: OsIssue): OsIssue {
+  const change = changeFor(issue.id, a)
+  if (!change) return issue
+  const sim = simulate(a, change)
+  const moved = sim.rankAfter < sim.rankBefore ? { from: sim.rankBefore, to: sim.rankAfter, of: sim.of } : undefined
+  return { ...issue, points: sim.delta, rank: moved, impact: sim.delta > 0 ? `+${sim.delta} pt${sim.delta === 1 ? '' : 's'}` : issue.impact }
 }
 
 /** The NORA skill that resolves an issue, when there is one (the rest are fixed by hand on their page). */

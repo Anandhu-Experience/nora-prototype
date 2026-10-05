@@ -164,6 +164,7 @@ export function guardChat(text: string): GuardResult<string> {
 
 export { maskTotal }
 export { KNOWN_ACTIONS, validateAction, validateSkill } from './actions.ts'
+export { checkCompliance, complianceSummary, type ComplianceResult } from './compliance.ts'
 
 export interface UntrustedResult {
   /** The text to use: neutralized, profanity starred. Empty when it was flagged. */

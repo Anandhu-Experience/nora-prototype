@@ -1,5 +1,6 @@
 import type { Graph } from '../mock/graph'
 import type { AiTaskKind } from '../profile/aiTasks'
+import type { SimChange } from '../presence/srs'
 
 /** action: reads -> drafts -> writes. insight: read-only. explore: external app card. */
 export type SkillKind = 'action' | 'insight' | 'explore'
@@ -125,6 +126,8 @@ export interface Skill {
   /** Raw SKILL.md, for display only. Nothing executes from it. */
   doc: string
 
+  /** The change this skill would make to what the Search Rank Score reads, so its worth can be shown before it runs. */
+  scoreChange?(graph: Graph): SimChange | null
   evaluate(graph: Graph): Applicability
   proposal(graph: Graph): Proposal
   /** Measurable effect of running the skill, derived from the graph. Omitted when it can't be stated honestly. */

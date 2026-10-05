@@ -70,7 +70,7 @@ describe('draft traces', () => {
     expect(d.source).toBe('ai')
     const t = traceStore.get().traces[0]!
     expect(t.outcome).toBe('ai')
-    expect(t.steps.map((s) => s.id)).toEqual(['input', 'action', 'mask', 'injection', 'safety', 'scope', 'agent', 'server', 'llm', 'output'])
+    expect(t.steps.map((s) => s.id)).toEqual(['input', 'action', 'mask', 'injection', 'safety', 'scope', 'agent', 'server', 'llm', 'compliance', 'output'])
     expect(t.steps.find((s) => s.id === 'server')!.detail).toMatch(/Masked email 1/)
     expect(t.steps.find((s) => s.id === 'llm')).toMatchObject({ status: 'pass' })
     expect(t.steps.every((s) => s.status !== 'pending')).toBe(true)

@@ -1,4 +1,5 @@
 import * as api from '../../mock/api'
+import { readReviewFacts } from '../../mock/database'
 import { AI_TASKS, type ReplyInput } from '../../profile/aiTasks'
 import { templateReply } from '../../profile/aiDrafts'
 import type { Review } from '../../profile/types'
@@ -31,6 +32,11 @@ export const reviewsSkill = defineSkill<ReviewRead>({
     const { total, unreplied } = graph.reviews
     if (unreplied === 0) return { applies: false, reason: `All ${total} reviews have a reply`, relevance: 0 }
     return { applies: true, reason: `${unreplied} of ${total} reviews have no reply`, relevance: Math.min(100, Math.round((unreplied / Math.max(1, total)) * 100)) }
+  },
+
+  scoreChange() {
+    const review = readReviewFacts().unreplied[0]
+    return review ? { reply: [review.id] } : null
   },
 
   expectedOutcome(graph) {

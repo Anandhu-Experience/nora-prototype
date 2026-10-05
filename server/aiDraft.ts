@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { guardInput, validateAction } from '../src/guardrails/index.ts'
+import { checkCompliance, complianceSummary, guardInput, validateAction, type ComplianceResult } from '../src/guardrails/index.ts'
 import { AI_TASKS, ARTICLE_TITLE_MAX, MODEL_CAPS, SERVICE_TAGLINE_MAX, isAiTaskKind, type AgentFacts, type AiTaskKind, type ArticleInput, type BioInput, type FaqInput, type MetaInput, type ModelId, type ReplyInput, type ServiceInput } from '../src/profile/aiTasks.ts'
 
 /**
@@ -10,7 +10,7 @@ import { AI_TASKS, ARTICLE_TITLE_MAX, MODEL_CAPS, SERVICE_TAGLINE_MAX, isAiTaskK
 
 export interface DraftResult {
   status: number
-  body: { text?: string; model?: string; error?: string; fields?: Record<string, string>; guardrail?: { method: string; code: string; message: string }; guardrails?: { masked: Record<string, number | undefined>; warnings: string[] } }
+  body: { text?: string; model?: string; error?: string; fields?: Record<string, string>; guardrail?: { method: string; code: string; message: string }; guardrails?: { masked: Record<string, number | undefined>; warnings: string[] }; compliance?: ComplianceResult }
 }
 
 type Messages = Pick<Anthropic, 'beta'>
@@ -302,19 +302,30 @@ export function createAiDraftHandler(opts: HandlerOptions = {}) {
 
       if (response.stop_reason === 'refusal') return { status: 422, body: { error: 'refused' } }
       const raw = response.content.flatMap((b) => (b.type === 'text' ? [b.text] : []))
+      // output compliance: what the model wrote is checked before it can reach the user as a ready draft
+      const outcome = (text: string): DraftResult | ComplianceResult => {
+        const c = checkCompliance(text)
+        return c.status === 'block' ? { status: 422, body: { error: 'output_blocked', guardrail: { method: 'compliance', code: c.hits.find((h) => h.level === 'block')!.rule, message: complianceSummary(c) } } } : c
+      }
       if (kind === 'service') {
         const copy = parseServiceCopy(raw.join('\n'))
         if (!copy) return { status: 502, body: { error: 'bad_format' } }
-        return { status: 200, body: { text: copy.description, model: response.model, fields: copy, guardrails } }
+        const c = outcome(`${copy.blurb} ${copy.description}`)
+        if ('body' in c) return c as DraftResult
+        return { status: 200, body: { text: copy.description, model: response.model, fields: copy, guardrails, compliance: c as ComplianceResult } }
       }
       if (kind === 'article') {
         const art = parseArticle(raw.join('\n'))
         if (!art) return { status: 502, body: { error: 'bad_format' } }
-        return { status: 200, body: { text: art.body, model: response.model, fields: art, guardrails } }
+        const c = outcome(`${art.title} ${art.body}`)
+        if ('body' in c) return c as DraftResult
+        return { status: 200, body: { text: art.body, model: response.model, fields: art, guardrails, compliance: c as ComplianceResult } }
       }
       const fitted = fitToLimit(raw.join(' '), task.maxChars)
       if (!fitted) return { status: 502, body: { error: 'empty_response' } }
-      return { status: 200, body: { text: fitted, model: response.model, guardrails } }
+      const c = outcome(fitted)
+      if ('body' in c) return c as DraftResult
+      return { status: 200, body: { text: fitted, model: response.model, guardrails, compliance: c as ComplianceResult } }
     } catch (err) {
       // Upstream detail (which can echo request data or credentials) is never forwarded to the browser.
       if (err instanceof Anthropic.RateLimitError) return { status: 429, body: { error: 'upstream_rate_limited' } }

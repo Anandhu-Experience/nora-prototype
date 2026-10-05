@@ -1,3 +1,6 @@
+import { checkCompliance, complianceSummary } from '../guardrails/compliance'
+import { liveSrs, previewFor } from './scorePreview'
+import type { Simulation } from '../presence/srs'
 import { startTrace, type StepStatus, type TraceHandle, type Trace, type Stage } from '../guardrails/trace'
 import { buildGraph, type Graph } from '../mock/graph'
 import { graphChanges } from '../profile/ui/graphDiff'
@@ -73,6 +76,8 @@ export class NoraEngine {
   /** The flow trace of the skill run in progress (issue found to evals), if one is open. */
   private run: TraceHandle | null = null
   private expected: { label: string; before: string; after: string } | null = null
+  /** What the score change was priced at when the run started, to check against what happened. */
+  private predicted: Simulation | null = null
 
   constructor(opts: NoraEngineOptions = {}) {
     this.registry = opts.registry ?? skillRegistry
@@ -121,6 +126,7 @@ export class NoraEngine {
     const tr = startTrace('run', skill.name)
     this.run = tr
     this.expected = skill.expectedOutcome?.(graph) ?? null
+    this.predicted = previewFor(skill, graph)
     this.step('graph', 'graph', 'Read the user graph', 'pass', graphSummary(graph))
     this.step('analyze', 'analyze', `${queued.length} of ${evaluations.length} skills apply`, 'pass', queued.map((e) => `${e.name}: ${e.reason}`).join('. ') || 'Nothing to act on')
     this.step('prioritize', 'prioritize', 'Ranked by priority, then relevance', 'pass', queued.map((e) => `${e.rank}. ${e.name} (priority ${e.priority}, relevance ${e.relevance})`).join(' · '))
@@ -134,6 +140,13 @@ export class NoraEngine {
       const still = skill.evaluate(next)
       const more = !!skill.repeatable && still.applies
       this.step('eval-quality', 'eval', 'Check quality and success', still.applies ? (more ? 'info' : 'warn') : 'pass', still.applies ? (more ? `This one is done. ${still.reason}, so NORA offers the next` : `${skill.name} still applies: ${still.reason}`) : `Resolved: ${skill.name} no longer applies`)
+      const actual = liveSrs()
+      const p = this.predicted
+      if (p) {
+        const gain = actual.total - p.before.total
+        const sign = (n: number) => (n >= 0 ? `+${n}` : String(n))
+        this.step('eval-score', 'eval', 'Check the score: predicted vs actual', gain === p.delta ? 'pass' : 'warn', `Predicted ${sign(p.delta)} points (${p.before.total} → ${p.after.total}), actual ${sign(gain)} (${p.before.total} → ${actual.total}). The prediction uses the same maths as the live score, so it should match`)
+      }
       this.step('eval-outcome', 'eval', 'Check the expected outcome', changes.length ? 'pass' : 'warn', `${this.expected ? `Expected ${this.expected.label}: ${this.expected.before} → ${this.expected.after}. ` : ''}Graph now: ${changes.length ? changes.map((c) => `${c.path} ${c.before} → ${c.after}`).join(', ') : 'no tracked field changed'}`)
     }
     const waiting = evaluateSkills(next ?? this.state.graph ?? buildGraph(), this.registry, this.state.handled).filter((e) => e.rank).length
@@ -303,9 +316,16 @@ export class NoraEngine {
     if (this.state.status !== 'WRITE_APPROVAL' || !this.state.draft) return
     const skill = this.skill(this.state.selectedSkillId)
     if (!skill.editDraft) return
+    // the user's own wording goes through the same output compliance as the model's
+    const c = checkCompliance(text)
+    if (c.status === 'block') {
+      this.step('edited', 'execute', 'Your edit was not used', 'block', complianceSummary(c))
+      this.note('Your edit was not used: it broke a compliance rule')
+      return
+    }
     const next = skill.editDraft(this.state.draft, text)
     this.dispatch({ type: 'patch', patch: { draft: next }, note: 'You edited the draft' })
-    this.step('edited', 'execute', 'You edited the text', 'info', `${text.length} characters. NORA posts exactly what you approve`)
+    this.step('edited', 'execute', 'You edited the text', c.status === 'warn' ? 'warn' : 'info', `${text.length} characters${c.status === 'warn' ? `. Flagged: ${complianceSummary(c)}` : ''}. NORA posts exactly what you approve`)
   }
 
   /** User rejects the draft. Nothing was written, so nothing to undo. */

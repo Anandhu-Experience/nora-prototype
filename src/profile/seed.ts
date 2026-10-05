@@ -148,13 +148,8 @@ const marcus: Agent = {
   phone: '+44 121 555 0166', email: 'marcus@newamerican.example', social: noSocial,
 }
 
+/** Profile page views come from the Insights traffic series (presence/insights.ts), not from here. */
 export const ANALYTICS = {
-  viewsLast7Days: [18, 24, 31, 27, 35, 42, 38],
-  /** Mock trend figures shown on the Profile Overview. */
-  viewsLast30Days: 860,
-  viewsChangePct: 18,
-  rankChangePct: 24,
-  days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
   referralsReceived: 9,
   /** Sent before this session; messages you send now are added on top. */
   referralsSentBefore: 3,

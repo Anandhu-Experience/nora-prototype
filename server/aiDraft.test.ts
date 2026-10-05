@@ -94,7 +94,7 @@ describe('the response', () => {
   it('returns the text and the model that produced it', async () => {
     const { client } = fakeClient('I help clients buy and refinance homes.')
     const out = await createAiDraftHandler({ client })({ kind: 'bio', input: bio() })
-    expect(out).toEqual({ status: 200, body: { text: 'I help clients buy and refinance homes.', model: 'claude-haiku-4-5' } })
+    expect(out).toEqual({ status: 200, body: { text: 'I help clients buy and refinance homes.', model: 'claude-haiku-4-5', compliance: { status: 'pass', hits: [] } } })
   })
 
   it('maps a refusal to 422, an empty answer to 502', async () => {

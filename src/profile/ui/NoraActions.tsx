@@ -5,6 +5,8 @@ import type { Evaluation, NoraState } from '../../nora/noraMachine'
 import { getSkill } from '../../nora/skillRegistry'
 import type { Skill } from '../../skills/types'
 import { useNora, useNoraFocus, useNoraProcessing, useNoraStop } from '../NoraContext'
+import { checkCompliance, complianceSummary } from '../../guardrails/compliance'
+import { previewFor } from '../../nora/scorePreview'
 import { ConsentModal } from './ConsentModal'
 import { suggestionsHidden } from './suggestionsHidden'
 import { graphChanges } from './graphDiff'
@@ -115,11 +117,13 @@ function ActionCard({ engine, state, evaluation: e }: { engine: NoraEngine; stat
   const selected = e.skillId === state.selectedSkillId
   const s = state.status
   const outcome = skill.expectedOutcome?.(graph)
+  const preview = previewFor(skill, graph)
 
   useEffect(() => setEdited(null), [state.draft?.summary])
   const canEdit = !!skill.editDraft && s === 'WRITE_APPROVAL'
   const draftText = edited ?? state.draft?.changes[0]?.after ?? ''
-  const editInvalid = canEdit && (!draftText.trim() || (skill.editLimit ? draftText.length > skill.editLimit : false))
+  const compliance = canEdit ? checkCompliance(draftText) : null
+  const editInvalid = canEdit && (!draftText.trim() || (skill.editLimit ? draftText.length > skill.editLimit : false) || compliance?.status === 'block')
   /** Approving posts exactly what is in the box: the edit is handed to the engine first. */
   const approve = () => {
     if (canEdit && edited !== null && edited !== state.draft?.changes[0]?.after) engine.editDraft(edited.trim())
@@ -152,6 +156,7 @@ function ActionCard({ engine, state, evaluation: e }: { engine: NoraEngine; stat
               <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Expected outcome</div>
               <div className="mt-0.5 text-xs text-slate-500">{outcome.label}</div>
               <div className="text-sm font-semibold text-slate-900">{outcome.before} → {outcome.after}</div>
+              {preview && preview.delta > 0 && <div className="mt-1 text-xs text-slate-500">Search Rank Score <b className="text-slate-800">{preview.before.total} → {preview.after.total}</b> <span className="font-semibold text-emerald-700">+{preview.delta}</span>{preview.rankAfter < preview.rankBefore ? <> · rank <b className="text-slate-800">#{preview.rankBefore} → #{preview.rankAfter}</b> of {preview.of}</> : null}</div>}
             </div>
           )}
           {analysis && <Analysis skill={skill} e={e} />}
@@ -201,6 +206,7 @@ function ActionCard({ engine, state, evaluation: e }: { engine: NoraEngine; stat
                       <>
                         <textarea value={draftText} onChange={(e) => setEdited(e.target.value)} rows={5} aria-label="Reply text" className="mt-1 w-full resize-y rounded-md border border-emerald-200 bg-white p-2 text-xs leading-relaxed text-slate-900 focus:border-emerald-400 focus:outline-none" />
                         {skill.editLimit && <div className={`mt-0.5 text-right text-[10px] ${draftText.length > skill.editLimit ? 'text-rose-600' : 'text-slate-400'}`}>{draftText.length} / {skill.editLimit}</div>}
+                        {compliance && compliance.status !== 'pass' && <p role="alert" className={`mt-1 rounded-md px-2 py-1 text-[11px] ${compliance.status === 'block' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-800'}`}>{compliance.status === 'block' ? 'Cannot post: ' : 'Check before posting: '}{complianceSummary(compliance)}</p>}
                       </>
                     )
                     : <p className="mt-0.5 text-slate-900">{c.after}</p>}

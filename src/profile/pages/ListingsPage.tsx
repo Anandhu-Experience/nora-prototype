@@ -1,8 +1,8 @@
 import { Building2, Info, X } from 'lucide-react'
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { connectionsStore, isConnected } from '../../presence/connections'
-import { dataIssues, dismissQaNote, knownCities, listingsAnswer, listingsPoints, listingsStore, listingsSummary, proposeFix, type FixProposal } from '../../presence/listings'
+import { FIELD_LABEL, dataIssues, dismissQaNote, knownCities, listingsAnswer, listingsPoints, listingsStore, listingsSummary, proposeFix, type FixProposal, type InfoField } from '../../presence/listings'
 import { AiInsightBar, Tabs, type Suggestion } from '../ui/kit'
 import { PageHeader } from '../ui/PageBits'
 import { AnalyticsTab } from '../ui/listings/AnalyticsTab'
@@ -18,6 +18,16 @@ export default function ListingsPage() {
   const [tab, setTab] = useState<Tab>('info')
   const [editing, setEditing] = useState(false)
   const [fix, setFix] = useState<FixProposal | null>(null)
+  const [params, setParams] = useSearchParams()
+  // an issue elsewhere in the app (for example a phone that differs from the profile) links here with ?fix=<field>
+  useEffect(() => {
+    const f = params.get('fix')
+    if (f && f in FIELD_LABEL) {
+      setTab('info')
+      setFix(proposeFix(f as InfoField))
+      setParams((p) => { const n = new URLSearchParams(p); n.delete('fix'); return n }, { replace: true })
+    }
+  }, [params, setParams])
   const sm = listingsSummary(s)
   const issues = dataIssues(s.info, knownCities())
 

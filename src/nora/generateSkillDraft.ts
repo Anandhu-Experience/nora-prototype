@@ -47,6 +47,12 @@ async function askServer(request: DraftRequest, opts: GenerateOptions, tr: Trace
     if (!res.ok) {
       if (res.status === 422) {
         const body = (await res.json().catch(() => null)) as { error?: string; guardrail?: { method?: string; message?: string } } | null
+        if (body?.error === 'output_blocked') {
+          tr.update('server', { status: 'pass', detail: 'Server input guardrails passed' })
+          tr.update('llm', { status: 'pass', detail: 'The model wrote a draft' })
+          tr.update('compliance', { status: 'block', detail: body.guardrail?.message ?? 'The draft broke a compliance rule.' })
+          return `Blocked by compliance: ${body.guardrail?.message ?? 'the draft broke a compliance rule.'}`
+        }
         if (body?.error === 'guardrail_blocked') {
           tr.update('server', { status: 'block', detail: `Server guardrails blocked it (${body.guardrail?.method ?? 'check'})` })
           tr.update('llm', { status: 'skip', detail: 'Not called: blocked by the server guardrails' })
@@ -58,7 +64,7 @@ async function askServer(request: DraftRequest, opts: GenerateOptions, tr: Trace
       tr.update('llm', { status: 'warn', detail: `Failed (HTTP ${res.status}). ${reason}` })
       return reason
     }
-    const data = (await res.json()) as { text?: unknown; model?: unknown; fields?: unknown; guardrails?: { masked?: Record<string, number>; warnings?: string[] } }
+    const data = (await res.json()) as { text?: unknown; model?: unknown; fields?: unknown; guardrails?: { masked?: Record<string, number>; warnings?: string[] }; compliance?: { status?: string; hits?: { message: string }[] } }
     const m = data.guardrails?.masked ? Object.entries(data.guardrails.masked).map(([k, v]) => `${k.toLowerCase()} ${v}`).join(', ') : ''
     tr.update('server', { status: 'pass', detail: m ? `Server guardrails passed. Masked ${m}` : 'Server guardrails passed' })
     if (typeof data.text !== 'string' || !data.text.trim()) return 'The AI service returned nothing usable.'
@@ -68,6 +74,9 @@ async function askServer(request: DraftRequest, opts: GenerateOptions, tr: Trace
         : undefined
     const draft = ai.apply(data.text, structuredClone(request.mockDraft), fields)
     tr.update('llm', { status: 'pass', detail: `${typeof data.model === 'string' ? data.model : 'model'} returned ${data.text.length} characters` })
+    tr.update('compliance', data.compliance?.status === 'warn'
+      ? { status: 'warn', detail: `Allowed with a flag: ${data.compliance.hits?.map((h) => h.message).join(' ')} You approve the final text` }
+      : { status: 'pass', detail: 'Deterministic mortgage rules passed (rates, payment examples, guarantees, Fair Housing, client details). A classifier pass is not built yet' })
     return { ...draft, source: 'ai', model: typeof data.model === 'string' ? data.model : undefined }
   } catch (e) {
     const why = (e as Error)?.name === 'AbortError' ? REASONS[504]! : 'The AI service is unreachable.'
@@ -116,10 +125,11 @@ export async function generateSkillDraft(request: DraftRequest, opts: GenerateOp
     request = { ...request, ai: { ...request.ai, input: guard.input } }
     tr.add({ id: 'server', stage: st('guardrails'), label: 'Server guardrails (second check)', status: 'pending', detail: 'Waiting for the server' })
     tr.add({ id: 'llm', stage: st('llm'), label: 'LLM', status: 'pending', detail: 'Waiting for the model…' })
+    tr.add({ id: 'compliance', stage: st('output'), label: 'Output compliance', status: 'pending', detail: 'Waiting for the model…' })
     tr.add({ id: 'output', stage: st('output'), label: 'Output', status: 'pending', detail: '' })
     const result = await askServer(request, opts, tr)
     if (typeof result !== 'string') {
-      tr.update('output', { status: 'info', detail: 'Length and format checks passed. Labelled "AI draft". Waits for your approval. No content-compliance check yet.' })
+      tr.update('output', { status: 'info', detail: 'Length, format and compliance checks passed. Labelled "AI draft". Waits for your approval.' })
       fin(tr, 'ai')
       return result
     }

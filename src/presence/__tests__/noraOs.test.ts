@@ -37,7 +37,7 @@ describe('NORA OS issues', () => {
 })
 
 describe('issue history', () => {
-  const issue = (id: string): OsIssue => ({ id, module: 'Connections', title: id, detail: '', severity: 'low', to: '/', cta: '' })
+  const issue = (id: string): OsIssue => ({ id, module: 'Connections', capability: 'local', title: id, detail: '', severity: 'low', to: '/', cta: '' })
 
   it('stamps a new issue once, resolves it when it disappears, and re-opens it if it returns', () => {
     let s = reconcile({ seen: {} }, [issue('a'), issue('b')], '2026-10-05T10:00:00Z')

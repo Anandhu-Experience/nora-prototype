@@ -53,6 +53,17 @@ export const profileSkill = defineSkill<ProfileRead>({
     }
   },
 
+  scoreChange(graph) {
+    const gaps = draftableMissing(graph.profile.missing)
+    if (!gaps.length) return null
+    const s = getState()
+    const me = s.agents[s.viewerId]!
+    const patch: Partial<typeof me> = {}
+    if (gaps.includes('bio')) patch.about = `${me.title} based in ${me.location}, helping clients find the right fit with clear, honest guidance.`
+    if (gaps.includes('specialties')) patch.specialties = [...me.specialties, ...SPECIALTY_POOL.filter((x) => !me.specialties.includes(x))].slice(0, Math.max(MIN_SPECIALTIES, me.specialties.length))
+    return { profile: patch }
+  },
+
   expectedOutcome(graph) {
     const gaps = draftableMissing(graph.profile.missing)
     if (!gaps.length) return null

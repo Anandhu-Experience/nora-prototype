@@ -80,12 +80,13 @@ function Detail({ d }: { d: Meta }) {
     case 'reviews':
       return (
         <div className="space-y-4">
-          <Formula>Reviews points = rating ÷ 5 × 200  +  5 × number of reviews (up to 20)   (capped at 300)</Formula>
+          <Formula>Reviews points = rating ÷ 5 × 200  +  5 × number of reviews (up to 20)  +  1 × public replies (up to 75)   (capped at 300)</Formula>
           <ul className="grid gap-3 sm:grid-cols-2">
             <Part label="Rating quality" points={200} of={300} bar={bar} note="Your average star rating as a share of 5 stars, worth up to 200 points." />
             <Part label="Review volume" points={100} of={300} bar={bar} note="5 points for each review, up to 20 reviews, worth up to 100 points." />
+            <Part label="Replies" points={75} of={300} bar={bar} note="1 point for each public reply, up to 75. V2 scores replies; the value per reply is our assumption." />
           </ul>
-          <InV2>V2 scores this part as <b>Reviews &amp; Replies</b>. Besides how many recent reviews you have, <b>replying to reviews earns points</b> (with a half-point rounding on the last reply). Our estimate does not include replies yet, and V2 does not show how rating or review source is weighted.</InV2>
+          <InV2>V2 scores this part as <b>Reviews &amp; Replies</b>. Besides how many recent reviews you have, <b>replying to reviews earns points</b> (with a half-point rounding on the last reply). The architecture plan also lets recent reviews lapse after 365 days, which our estimate does not do yet. V2 does not show how rating or review source is weighted.</InV2>
           <Example>An average of 4.5 stars with 10 reviews earns 4.5 ÷ 5 × 200 = 180, plus 10 × 5 = 50, so 230 points.</Example>
         </div>
       )

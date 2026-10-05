@@ -1,6 +1,7 @@
 import { BarChart3, Eye, Gauge, History, Search, Send, Sparkles, Star, UserPlus } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { series, windowFor } from '../../../presence/insights'
 import { ANALYTICS } from '../../seed'
 import { agentCompleteness, agentGaps, fmtDate, fmtRating, insightsFor, ratingStats } from '../../selectors'
 import { useNoraFix } from '../../NoraContext'
@@ -34,7 +35,9 @@ export function ProfileTab() {
   const pct = agentCompleteness(me)
   const gaps = agentGaps(me)
   const [hover, setHover] = useState<number | null>(null)
-  const views = ANALYTICS.viewsLast7Days
+  // the same traffic series the Traffic and Google tabs read, so the overview, this tab and Insights always agree
+  const ser = series('views', windowFor('7d'))
+  const views = ser.values
   const max = Math.max(...views)
   const total = views.reduce((a, b) => a + b, 0)
   const sentNow = state.threads.reduce((n, t) => n + (t.withAgentId !== me.id ? t.messages.filter((m) => m.from === 'me').length : 0), 0)
@@ -68,11 +71,11 @@ export function ProfileTab() {
               >
                 {hover === i && (
                   <div className="absolute -top-1 z-10 -translate-y-full whitespace-nowrap rounded-lg bg-zinc-900 px-2.5 py-1.5 text-xs text-white shadow-lg">
-                    <div className="text-[10px] uppercase tracking-wide text-zinc-400">{ANALYTICS.days[i]}</div>{v} views
+                    <div className="text-[10px] uppercase tracking-wide text-zinc-400">{ser.labels[i]}</div>{v} views
                   </div>
                 )}
                 <div className={`w-full rounded-t-lg ${hover === i ? 'bg-blue-600' : v === max ? 'bg-blue-500' : 'bg-sky-200'}`} style={{ height: `${(v / max) * 100}%` }} />
-                <span className="text-xs text-slate-500">{ANALYTICS.days[i]}</span>
+                <span className="text-xs text-slate-500">{ser.labels[i]}</span>
               </div>
             ))}
           </ScrollFade>

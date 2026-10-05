@@ -27,6 +27,10 @@ export const connectionsSkill = defineSkill<ConnectionRead>({
     return { applies: true, reason: `Google is not connected, ${graph.accounts.points} of 100 connection points, +${GOOGLE.points} available`, relevance: 100 - graph.accounts.points }
   },
 
+  scoreChange(graph) {
+    return graph.accounts.google ? null : { connect: ['google'] }
+  },
+
   expectedOutcome(graph) {
     if (graph.accounts.google) return null
     return { label: 'Connection points', before: `${graph.accounts.points} of 100`, after: `${graph.accounts.points + GOOGLE.points} of 100` }

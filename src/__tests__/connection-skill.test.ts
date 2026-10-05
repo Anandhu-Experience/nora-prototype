@@ -125,6 +125,17 @@ describe('guided Google connection through NORA', () => {
     expect(stages.indexOf('update')).toBeLessThan(stages.indexOf('eval'))
   })
 
+  it('prices the change before it runs and checks the prediction against the real score after', async () => {
+    const e = engine()
+    await e.reset('google-needed')
+    await e.approveStart()
+    await e.approveWrite()
+    const t = traceStore.get().traces[0]!
+    const score = t.steps.find((x) => x.id === 'eval-score')!
+    expect(score.status).toBe('pass')
+    expect(score.detail).toMatch(/Predicted \+30 points .* actual \+30/)
+  })
+
   it('"Not now" leaves no trace; rejecting the draft closes the run as declined with its eval', async () => {
     const e = engine()
     await e.reset('google-needed')

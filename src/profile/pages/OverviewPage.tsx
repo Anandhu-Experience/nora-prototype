@@ -1,13 +1,19 @@
 import { LayoutTemplate, Camera, CheckCircle2, Download, EyeOff, Link2, MapPin, MoreVertical, Pencil, Printer, ExternalLink, ChevronRight, Building2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { useNora, useNoraChat, useNoraFix } from '../NoraContext'
+import { useNoraFix } from '../NoraContext'
+import { capabilityState } from '../../presence/capabilities'
+import { collectIssues, useOsRefresh } from '../../presence/noraOs'
 import { coverStyle, initials, vcard, type RecActionId } from '../selectors'
 import { actions, useStore } from '../store'
 import { MENU_ITEM, Popover } from '../ui/bits'
 import { EditProfileModal, SECTIONS, type EditSection } from '../ui/EditProfileModal'
-import { NoraAssistantCard, KpiCards, RecentReviews, RecommendedActions, ReviewsRatings } from '../ui/overview'
-import { ScrollFade } from '../ui/ScrollFade'
+import { CapabilityHealthSection } from '../ui/home/CapabilityHealthSection'
+import { NextBestAction } from '../ui/home/NextBestAction'
+import { RecentActivity } from '../ui/home/RecentActivity'
+import { SearchRankSummary } from '../ui/home/SearchRankSummary'
+import { useIssueAction } from '../ui/home/useIssueAction'
+import { RecentReviews, ReviewsRatings } from '../ui/overview'
 import { CoverModal } from '../ui/SmallModals'
 import { useToast } from '../ui/Toast'
 
@@ -16,9 +22,8 @@ type ModalState = { kind: 'edit'; section: EditSection } | { kind: 'cover' } | n
 export default function OverviewPage() {
   const state = useStore()
   const agent = state.agents[state.viewerId]!
-  const { state: nora } = useNora()
+  useOsRefresh()
   const fix = useNoraFix()
-  const chat = useNoraChat()
   const toast = useToast()
   const [params, setParams] = useSearchParams()
   const [modal, setModal] = useState<ModalState>(null)
@@ -42,6 +47,10 @@ export default function OverviewPage() {
     const section: Record<Exclude<RecActionId, 'specialties' | 'cover'>, EditSection> = { photo: 'Photos', 'service-areas': 'Location', awards: 'Awards', bio: 'About' }
     setModal({ kind: 'edit', section: section[id] })
   }
+  // one list of issues for the whole page; the same list feeds NORA OS and the floating NORA button
+  const issues = collectIssues(agent)
+  const health = capabilityState(agent, issues)
+  const runIssue = useIssueAction(run)
 
   const published = agent.published !== false
   const publicUrl = `${location.origin}/profile/${agent.id}`
@@ -61,7 +70,6 @@ export default function OverviewPage() {
 
   const chips = moreChips ? agent.specialties : agent.specialties.slice(0, 4)
   const hidden = agent.specialties.length - 4
-  const proposal = nora.status === 'SKILL_PROPOSED' && nora.proposal ? nora.proposal.message : null
 
   return (
     <div className="mx-auto max-w-[1200px] space-y-5">
@@ -92,11 +100,10 @@ export default function OverviewPage() {
           <div className="flex flex-col gap-5 p-5 sm:flex-row">
             <div className="relative h-[150px] w-[150px] shrink-0">
               {agent.photoUrl ? <img src={agent.photoUrl} alt={agent.name} className="h-full w-full rounded-full object-cover" /> : <div className="flex h-full w-full items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-green-700 text-5xl font-bold text-white">{initials(agent.name)}</div>}
-              {agent.pro && <span className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/3 rounded-full bg-blue-600 px-2.5 py-0.5 text-[11px] font-bold tracking-wide text-white ring-2 ring-white">PRO</span>}
               <button onClick={() => setModal({ kind: 'edit', section: 'Photos' })} aria-label="Change photo" className="absolute bottom-1 right-1 flex h-9 w-9 items-center justify-center rounded-full bg-white text-slate-800 shadow-md hover:bg-slate-50"><Camera size={16} /></button>
             </div>
             <div className="min-w-0 flex-1">
-              <h2 className="flex items-center gap-2 text-2xl font-bold text-slate-900">{agent.name}{agent.pro && <CheckCircle2 size={22} className="text-blue-600" aria-label="Verified Pro member" />}</h2>
+              <h2 className="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xl font-bold text-slate-900"><span className="whitespace-nowrap">{agent.name}</span>{agent.pro && <span className="rounded-full bg-blue-600 px-2.5 py-0.5 text-[11px] font-bold tracking-wide text-white">PRO</span>}{agent.pro && <CheckCircle2 size={22} className="text-blue-600" aria-label="Verified Pro member" />}</h2>
               <p className="text-slate-600">{agent.title}</p>
               <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-500">
                 <span className="inline-flex items-center gap-1.5"><MapPin size={14} /> {agent.location}</span>
@@ -123,20 +130,20 @@ export default function OverviewPage() {
         </div>
       </section>
 
-      {/* KPI cards: a swipeable row on phones */}
-      <ScrollFade axis="x" tone="page" className="-mb-3 -mt-1 pb-3 pt-1" innerClassName="flex gap-4 sm:min-w-0 sm:grid sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCards agent={agent} onActions={() => document.getElementById('recommended-actions')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />
-      </ScrollFade>
-
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
-        <RecommendedActions agent={agent} onRun={run} />
-        <NoraAssistantCard agent={agent} onRun={run} onAsk={(q) => chat.ask(q)} proposal={proposal} />
+      {/* where you stand, what to do next, and how each capability is doing */}
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]">
+        <SearchRankSummary agent={agent} />
+        <NextBestAction issues={issues} onRun={runIssue} />
       </div>
+
+      <CapabilityHealthSection health={health} onRun={runIssue} />
 
       <div className="grid grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
         <ReviewsRatings agent={agent} />
         <RecentReviews agent={agent} />
       </div>
+
+      <RecentActivity agent={agent} />
 
       {modal?.kind === 'edit' && <EditProfileModal agent={agent} initialSection={modal.section} onClose={() => setModal(null)} />}
       {modal?.kind === 'cover' && <CoverModal agent={agent} onClose={() => setModal(null)} />}

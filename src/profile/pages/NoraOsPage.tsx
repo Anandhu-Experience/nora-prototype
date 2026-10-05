@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { OS_MODULES, collectIssues, noraOsStore, resolvedIssues, skillForIssue, useOsRefresh, type OsIssue, type OsModule, type Severity } from '../../presence/noraOs'
 import { getSkill } from '../../nora/skillRegistry'
-import { useSrs } from '../../presence/srs'
+import { bandOf, useSrs } from '../../presence/srs'
 import { useNora, useNoraFix } from '../NoraContext'
 import { timeAgo } from '../selectors'
 import { useStore } from '../store'
@@ -38,7 +38,7 @@ export default function NoraOsPage() {
         <KpiCell icon={AlertTriangle} label="Open issues" value={issues.length} sub={issues.length ? 'Across all modules' : 'Nothing needs you'} />
         <KpiCell icon={Target} label="High priority" value={high} sub={high ? 'Worth doing first' : 'None right now'} />
         <KpiCell icon={CheckCircle2} label="Resolved" value={resolved.length} sub="Since you started" />
-        <KpiCell icon={Activity} label="Search Rank Score" value={<>{srs.total}<span className="text-sm font-medium text-slate-400"> / {srs.max}</span></>} sub={<Link to="/search-rank" className="text-blue-600 hover:underline">View breakdown</Link>} />
+        <KpiCell icon={Activity} label="Search Rank Score" value={<>{srs.total}<span className="text-sm font-medium text-slate-400"> / {srs.max}</span></>} sub={<>{bandOf(srs.total).label} · <Link to="/search-rank" className="text-blue-600 hover:underline">View breakdown</Link></>} />
       </KpiGrid>
       <Tabs<Tab>
         value={tab} onChange={setTab} label="NORA OS sections"

@@ -95,6 +95,20 @@ describe('guided review reply through NORA, written by the model', () => {
     expect(me().reviews.find((r) => r.id === target.reviewId)!.reply).toBe('My own words, thank you John.')
   })
 
+  it('refuses an edit that breaks a compliance rule and still posts nothing wrong', async () => {
+    vi.stubGlobal('fetch', ok())
+    const e = engine()
+    await e.reset('review-reply-needed')
+    await e.approveStart()
+    const target = e.getState().draft!.payload as { reviewId: string }
+    e.editDraft('Thanks John! Our rates start at 5.2% APR, we guarantee approval.')
+    expect(e.getState().draft!.changes[0]!.after).toBe(AI_TEXT) // the edit was not applied
+    await e.approveWrite()
+    expect(me().reviews.find((r) => r.id === target.reviewId)!.reply).toBe(AI_TEXT)
+    const t = traceStore.get().traces.find((x) => x.title === 'Review Reply')!
+    expect(t.steps.find((x) => x.id === 'edited')).toMatchObject({ status: 'block' })
+  })
+
   it('rejecting the draft posts nothing and stops offering replies', async () => {
     vi.stubGlobal('fetch', ok())
     const e = engine()

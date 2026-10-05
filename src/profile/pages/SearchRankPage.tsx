@@ -2,7 +2,7 @@ import { ArrowRight, BarChart3, Sparkles, Target, TrendingUp, Trophy } from 'luc
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { authorityScore, voceStore } from '../../presence/voce'
-import { leaderboard, useSrs, type DriverId } from '../../presence/srs'
+import { bandOf, explainSrs, leaderboard, useSrs, type DriverId } from '../../presence/srs'
 import { srsAnswer } from '../assistant'
 import { useNoraFix } from '../NoraContext'
 import { ratingStats } from '../selectors'
@@ -42,6 +42,8 @@ export default function SearchRankPage() {
   const store = useStore()
   const agent = store.agents[store.viewerId]!
   const srs = useSrs(agent)
+  // why the score is what it is: what earned each driver's points and what is still missing, from the same stores the score reads
+  const explain = explainSrs(agent)
   const voce = voceStore.use()
   const navigate = useNavigate()
   const fix = useNoraFix()
@@ -87,7 +89,7 @@ export default function SearchRankPage() {
       <Hero title="Search Rank Score Progress Tracker" blurb="Your ranking among top agents in your location, your score and the points to the top.">
         <div className="grid max-w-xl grid-cols-3 gap-3">
           <Stat label="Your ranking" value={`#${me.rank}`} sub={`of ${board.length}`} />
-          <Stat label="Your SRS" value={String(srs.total)} sub={`of ${srs.max}`} />
+          <Stat label="Your SRS" value={String(srs.total)} sub={`of ${srs.max} · ${bandOf(srs.total).label}`} />
           <Stat label="Points to #1" value={String(toTop)} sub={above ? `${toNext} to next rank` : 'You lead'} />
         </div>
       </Hero>
@@ -96,12 +98,22 @@ export default function SearchRankPage() {
         <Card title="Score progress" className="h-full">
           <div className="flex flex-col items-center gap-5 sm:flex-row">
             <Ring value={srs.total} max={srs.max} size={132} label={`${pct}% of ${srs.max}`}><span className="text-2xl font-bold text-slate-900">{pct}%</span><span className="text-xs text-slate-500">of {srs.max}</span></Ring>
-            <p className="text-sm text-slate-600">You have <b className="text-slate-900">{srs.total}</b> of {srs.max} possible Search Rank points.</p>
+            <p className="text-sm text-slate-600">You have <b className="text-slate-900">{srs.total}</b> of {srs.max} possible Search Rank points. That is the <b className="text-slate-900">{bandOf(srs.total).label}</b> band ({bandOf(srs.total).min} to {bandOf(srs.total).max}).</p>
           </div>
           <ul className="mt-5 space-y-4">
             {srs.drivers.map((d) => (
               <li key={d.id} className="flex items-end gap-3">
-                <div className="min-w-0 flex-1"><ScoreBar label={d.label} points={d.points} max={d.max} tone={d.points >= d.max ? 'bg-emerald-500' : 'bg-blue-500'} right={`${d.points} / ${d.max}  ${Math.round((d.points / d.max) * 100)}%`} /></div>
+                <div className="min-w-0 flex-1"><ScoreBar label={d.label} points={d.points} max={d.max} tone={d.points >= d.max ? 'bg-emerald-500' : 'bg-blue-500'} right={`${d.points} / ${d.max}  ${Math.round((d.points / d.max) * 100)}%`} />
+                  {(() => {
+                    const why = explain.find((x) => x.id === d.id)
+                    return why && (
+                      <div className="mt-1.5 space-y-0.5 text-xs" data-explain={d.id}>
+                        {why.contributes.map((c) => <div key={c} className="text-slate-600"><span className="font-medium text-emerald-700">Earned: </span>{c}</div>)}
+                        {why.missing.length > 0 && <div className="text-slate-500"><span className="font-medium text-amber-700">Missing: </span>{why.missing.join(' · ')}</div>}
+                      </div>
+                    )
+                  })()}
+                </div>
                 <Link to={d.to} aria-label={`Improve ${d.label}`} className="shrink-0 rounded-lg border border-blue-200 px-2.5 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-50">Improve</Link>
               </li>
             ))}
