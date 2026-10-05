@@ -7,6 +7,7 @@ import type { AiTaskKind } from '../profile/aiTasks.ts'
  */
 export const KNOWN_ACTIONS: Record<string, readonly AiTaskKind[]> = {
   'profile-completion': ['bio'],
+  'connection-setup': [],
   'listing-optimization': [],
   'web-analytics-insight': [],
   'voce-explore': [],

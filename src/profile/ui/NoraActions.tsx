@@ -5,6 +5,7 @@ import type { Evaluation, NoraState } from '../../nora/noraMachine'
 import { getSkill } from '../../nora/skillRegistry'
 import type { Skill } from '../../skills/types'
 import { useNora, useNoraFocus, useNoraProcessing, useNoraStop } from '../NoraContext'
+import { ConsentModal } from './ConsentModal'
 import { graphChanges } from './graphDiff'
 import { BTN_GHOST, BTN_PRIMARY } from './Modal'
 
@@ -64,9 +65,10 @@ export function NoraActions() {
   switch (s) {
     case 'COMPLETED': {
       const changes = state.previousGraph && state.graph ? graphChanges(state.previousGraph, state.graph) : []
+      const consent = getSkill(state.lastOutcome?.skillId ?? '')?.consent
       return (
         <div className={CARD}>
-          <p className="flex items-center gap-2 font-medium text-emerald-700"><CheckCircle2 size={17} /> {state.insight ? 'Noted.' : 'Done. Saved to your profile.'}</p>
+          <p className="flex items-center gap-2 font-medium text-emerald-700"><CheckCircle2 size={17} /> {state.insight ? 'Noted.' : consent ? `Done. ${consent.provider} is connected.` : 'Done. Saved to your profile.'}</p>
           {changes.length > 0 && (
             <div className="mt-2 rounded-lg bg-slate-50 p-2.5 font-mono text-[11px] text-slate-600">
               <div className="mb-1 font-sans font-semibold text-slate-500">Graph updated</div>
@@ -105,7 +107,9 @@ export function NoraActions() {
 
 function ActionCard({ engine, state, evaluation: e }: { engine: NoraEngine; state: NoraState; evaluation: Evaluation }) {
   const [analysis, setAnalysis] = useState(false)
+  const [consenting, setConsenting] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const actionsRef = useRef<HTMLDivElement>(null)
   const focusTick = useNoraFocus()
   const processing = useNoraProcessing()
   const stop = useNoraStop()
@@ -114,6 +118,13 @@ function ActionCard({ engine, state, evaluation: e }: { engine: NoraEngine; stat
   const selected = e.skillId === state.selectedSkillId
   const s = state.status
   const outcome = skill.expectedOutcome?.(graph)
+
+  // keep the user's eyes on the current action as it moves: the card while NORA works, the approve buttons once it needs a decision
+  useEffect(() => {
+    if (!selected) return
+    const el = s === 'WRITE_APPROVAL' || s === 'WRITING' ? actionsRef.current : s === 'RESULT_READY' || s in RUN_STEP || s === 'DRAFT_READY' || s === 'SKILL_PROPOSED' ? ref.current : null
+    el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [selected, s])
 
   // a "fix with NORA" link brings the targeted card into view
   useEffect(() => {
@@ -163,7 +174,9 @@ function ActionCard({ engine, state, evaluation: e }: { engine: NoraEngine; stat
         <>
           <p className="mt-1 text-xs text-slate-500">
             {state.draft!.summary} ·{' '}
-            {state.draft!.source === 'ai'
+            {skill.allowedModel === 'none'
+              ? 'no AI model used'
+              : state.draft!.source === 'ai'
               ? `written by ${state.draft!.model ?? skill.allowedModel}`
               : state.draft!.source === 'mock'
                 ? `template draft${state.draft!.note ? ` (${state.draft!.note.replace(/\.$/, '')})` : ''}`
@@ -178,13 +191,14 @@ function ActionCard({ engine, state, evaluation: e }: { engine: NoraEngine; stat
               </div>
             ))}
           </div>
-          <p className="mt-2 text-[11px] text-slate-500">Nothing is saved until you approve.</p>
-          <div className="mt-2.5 flex justify-end gap-2">
+          <p className="mt-2 text-[11px] text-slate-500">{skill.consent ? `Nothing is connected until you allow access on ${skill.consent.provider}’s screen.` : 'Nothing is saved until you approve.'}</p>
+          <div ref={actionsRef} className="mt-2.5 flex justify-end gap-2">
             <button className={`${BTN_GHOST} ${SMALL}`} disabled={s !== 'WRITE_APPROVAL'} onClick={() => void engine.rejectWrite()}><X size={13} /> Reject</button>
-            <button className={`${BTN_PRIMARY} ${SMALL}`} disabled={s !== 'WRITE_APPROVAL'} onClick={() => void engine.approveWrite()}>
-              {s === 'WRITING' ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} {s === 'WRITING' ? 'Applying…' : 'Approve & Apply'}
+            <button className={`${BTN_PRIMARY} ${SMALL}`} disabled={s !== 'WRITE_APPROVAL'} onClick={() => (skill.consent ? setConsenting(true) : void engine.approveWrite())}>
+              {s === 'WRITING' ? <Loader2 size={13} className="animate-spin" /> : skill.consent ? <ShieldCheck size={13} /> : <Check size={13} />} {s === 'WRITING' ? (skill.consent ? 'Connecting…' : 'Applying…') : (skill.consent?.cta ?? 'Approve & Apply')}
             </button>
           </div>
+          {consenting && skill.consent && s === 'WRITE_APPROVAL' && <ConsentModal request={skill.consent} onCancel={() => setConsenting(false)} onAllow={() => { setConsenting(false); void engine.approveWrite() }} />}
         </>
       )}
 
@@ -205,7 +219,7 @@ function ActionCard({ engine, state, evaluation: e }: { engine: NoraEngine; stat
 function Chips({ skill }: { skill: Skill }) {
   return (
     <div className="mt-2.5 flex flex-wrap gap-1.5">
-      <Chip tone="green">{skill.kind === 'action' ? 'NORA prepares a draft' : 'Read-only insight'}</Chip>
+      <Chip tone="green">{skill.consent ? `You allow access on ${skill.consent.provider}` : skill.kind === 'action' ? 'NORA prepares a draft' : 'Read-only insight'}</Chip>
       {skill.requiresApproval && <Chip>Needs your approval</Chip>}
       {skill.allowedModel !== 'none' && <Chip>{skill.allowedModel}</Chip>}
     </div>

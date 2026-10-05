@@ -20,7 +20,7 @@ describe('NORA <-> Profile page', () => {
     expect(arj().specialties).toHaveLength(3)
     const g = buildGraph()
     expect(g.profile.missing).toEqual(['specialties'])
-    expect(g.user.name).toBe('Arjunan')
+    expect(g.user.name).toBe('Matt Reeves')
   })
 
   it('live scenario never overwrites Profile page data', () => {

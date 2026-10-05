@@ -1,4 +1,4 @@
-export type ScenarioId = 'live' | 'profile-needed' | 'all-complete' | 'voce-exists' | 'multi-action'
+export type ScenarioId = 'live' | 'profile-needed' | 'all-complete' | 'voce-exists' | 'multi-action' | 'google-needed'
 
 export interface User {
   id: string
@@ -40,6 +40,12 @@ export interface VoceAccount {
   questionsAnswered: number
 }
 
+export interface Accounts {
+  google: boolean
+  /** Connection points earned, out of 100. */
+  points: number
+}
+
 /** Everything the mock "backend" holds. Only api.ts may touch this. */
 export interface Database {
   user: User
@@ -47,6 +53,8 @@ export interface Database {
   listings: Listing[]
   analytics: Analytics
   connections: Connections
+  /** Linked accounts that earn Search Rank Score points (Google, Facebook...). Live scenario: read from the Connections page. */
+  accounts: Accounts
   voce: VoceAccount
 }
 

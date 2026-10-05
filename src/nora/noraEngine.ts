@@ -1,4 +1,6 @@
+import { startTrace, type StepStatus, type TraceHandle, type Trace, type Stage } from '../guardrails/trace'
 import { buildGraph, type Graph } from '../mock/graph'
+import { graphChanges } from '../profile/ui/graphDiff'
 import { resetDatabase } from '../mock/database'
 import type { ScenarioId } from '../mock/types'
 import type { Skill } from '../skills/types'
@@ -50,6 +52,10 @@ export function selectExplore(evals: Evaluation[]): string | null {
   return c[0]?.skillId ?? null
 }
 
+/** One line on what NORA read, for the flow trace. */
+const graphSummary = (g: Graph): string =>
+  `profile ${g.profile.completeness}% complete · ${g.listings.incomplete} of ${g.listings.total} listings incomplete · Google ${g.accounts.google ? 'connected' : 'not connected'} (${g.accounts.points} of 100 connection points) · traffic ${g.analytics.changePct >= 0 ? '+' : ''}${g.analytics.changePct}%`
+
 /* ---------- Orchestration ---------- */
 
 export interface NoraEngineOptions {
@@ -64,6 +70,9 @@ export class NoraEngine {
   private epoch = 0
   private registry: readonly Skill[]
   private stepDelayMs: number
+  /** The flow trace of the skill run in progress (issue found to evals), if one is open. */
+  private run: TraceHandle | null = null
+  private expected: { label: string; before: string; after: string } | null = null
 
   constructor(opts: NoraEngineOptions = {}) {
     this.registry = opts.registry ?? skillRegistry
@@ -93,6 +102,45 @@ export class NoraEngine {
   }
   private pause = (scale = 1) =>
     this.stepDelayMs ? new Promise<void>((r) => setTimeout(r, this.stepDelayMs * scale)) : Promise.resolve()
+  /* ---------- flow trace of a skill run: user graph, analyze, prioritize, select, routing, guardrails + execute, update, evals ---------- */
+
+  private step(id: string, stage: Stage, label: string, status: StepStatus, detail: string): void {
+    this.run?.add({ id, stage, label, status, detail })
+  }
+  private upd(id: string, status: StepStatus, detail: string): void {
+    this.run?.update(id, { status, detail })
+  }
+  private endRun(outcome: NonNullable<Trace['outcome']>): void {
+    this.run?.finish(outcome)
+    this.run = null
+  }
+  /** Starts the trace only once the user has chosen to run the skill: proposals the user never acts on leave no trace. */
+  private beginRun(skill: Skill, graph: Graph, evaluations: Evaluation[]): void {
+    const queued = evaluations.filter((e) => e.rank).sort((a, b) => a.rank! - b.rank!)
+    this.endRun('superseded')
+    const tr = startTrace('run', skill.name)
+    this.run = tr
+    this.expected = skill.expectedOutcome?.(graph) ?? null
+    this.step('graph', 'graph', 'Read the user graph', 'pass', graphSummary(graph))
+    this.step('analyze', 'analyze', `${queued.length} of ${evaluations.length} skills apply`, 'pass', queued.map((e) => `${e.name}: ${e.reason}`).join('. ') || 'Nothing to act on')
+    this.step('prioritize', 'prioritize', 'Ranked by priority, then relevance', 'pass', queued.map((e) => `${e.rank}. ${e.name} (priority ${e.priority}, relevance ${e.relevance})`).join(' · '))
+    this.step('select', 'select', `Selected ${skill.name}`, 'pass', `“${skill.proposal(graph).message}” You approved: ${this.state.proposal?.cta ?? 'start'} (Approval 1)`)
+  }
+  /** The last steps of a run: what was checked and recorded, then close it. */
+  private evalAndEnd(skill: Skill, outcome: Outcome, verdict: NonNullable<Trace['outcome']>, prev?: Graph, next?: Graph): void {
+    if (!this.run) return
+    if (prev && next) {
+      const changes = graphChanges(prev, next)
+      const still = skill.evaluate(next)
+      this.step('eval-quality', 'eval', 'Check quality and success', still.applies ? 'warn' : 'pass', still.applies ? `${skill.name} still applies: ${still.reason}` : `Resolved: ${skill.name} no longer applies`)
+      this.step('eval-outcome', 'eval', 'Check the expected outcome', changes.length ? 'pass' : 'warn', `${this.expected ? `Expected ${this.expected.label}: ${this.expected.before} → ${this.expected.after}. ` : ''}Graph now: ${changes.length ? changes.map((c) => `${c.path} ${c.before} → ${c.after}`).join(', ') : 'no tracked field changed'}`)
+    }
+    const waiting = evaluateSkills(next ?? this.state.graph ?? buildGraph(), this.registry, this.state.handled).filter((e) => e.rank).length
+    this.step('eval-record', 'eval', 'Record the eval result', 'pass', `Outcome “${outcome}” saved for this session. ${waiting} other skill${waiting === 1 ? '' : 's'} waiting`)
+    this.step('eval-improve', 'eval', 'Use the result to improve', 'info', 'This skill is not proposed again this session. A stored eval history that tunes ranking and routing is not built yet')
+    this.endRun(verdict)
+  }
+
   private skill(id: string | null): Skill {
     const s = this.registry.find((x) => x.id === id)
     if (!s) throw new Error(`Unknown skill ${id}`)
@@ -104,6 +152,7 @@ export class NoraEngine {
   /** Load a scenario's data and restart from login. Also the "Reset Demo" action. */
   async reset(scenario: ScenarioId): Promise<void> {
     this.epoch++
+    this.endRun('superseded')
     resetDatabase(scenario)
     this.dispatch({ type: 'reset', scenario })
     await this.login()
@@ -142,6 +191,8 @@ export class NoraEngine {
     const st = this.state.status
     if (st !== 'SKILL_APPROVED' && st !== 'READING' && st !== 'VALIDATING' && st !== 'DRAFT_READY') return
     const epoch = ++this.epoch
+    this.step('stopped', 'execute', 'Stopped by you', 'block', 'Nothing was changed')
+    this.endRun('declined')
     this.go('RE_EVALUATING', { draft: null, validation: null, insight: null }, 'Stopped by you; nothing was changed')
     await this.route(epoch)
   }
@@ -161,26 +212,34 @@ export class NoraEngine {
     const skill = this.skill(this.state.selectedSkillId)
     try {
       this.go('SKILL_APPROVED', undefined, `Approved start: ${skill.name}`)
+      this.beginRun(skill, this.state.graph!, this.state.evaluations)
+      this.step('routing', 'routing', 'Model chosen by the skill', 'pass', skill.allowedModel === 'none' ? 'No model needed: this skill has no text to write. NORA never picks a model' : `${skill.allowedModel}, declared by the skill. NORA does not pick the model`)
       await this.pause()
       if (epoch !== this.epoch) return
 
       this.go('READING', undefined, `${skill.name}: read (no data modified)`)
+      this.step('read', 'execute', 'Context validation: read your data', 'pending', 'Read only. Nothing is modified')
       const data = await skill.read!()
       if (epoch !== this.epoch) return
+      this.upd('read', 'pass', 'Read only. Nothing was modified')
 
       this.go('VALIDATING', undefined, `${skill.name}: validate`)
       const validation = skill.validate!(data)
+      this.step('validate', 'execute', 'Input validation: what needs doing', validation.findings.length ? 'pass' : 'info', validation.findings.length ? validation.findings.map((f) => `${f.label}: ${f.detail}`).join('. ') : 'Nothing actionable found')
       await this.pause()
       if (epoch !== this.epoch) return
 
       if (validation.findings.length === 0) {
         this.markHandled(skill.id, 'nothing-to-do')
+        this.evalAndEnd(skill, 'nothing-to-do', 'completed')
         this.go('RE_EVALUATING', { validation }, `${skill.name}: nothing actionable found`)
         return this.route(epoch)
       }
 
       if (skill.kind === 'insight') {
         this.go('RESULT_READY', { validation, insight: skill.insight!(validation) }, `${skill.name}: insight ready (read-only)`)
+        this.step('insight', 'execute', 'Insight ready (read-only)', 'pass', this.state.insight!.title)
+        this.step('approval', 'execute', 'Waiting for you to read it', 'pending', 'Nothing is written for an insight')
         return
       }
 
@@ -188,14 +247,15 @@ export class NoraEngine {
       if (request.model !== skill.allowedModel) {
         throw new Error(`${skill.name} requested model ${request.model} but is only allowed ${skill.allowedModel}`)
       }
-      this.note(`Drafting with ${skill.allowedModel} (chosen by the skill, not NORA)`)
-      const draft = await generateSkillDraft(request)
+      this.note(skill.allowedModel === 'none' ? 'Preparing the draft (no AI model needed)' : `Drafting with ${skill.allowedModel} (chosen by the skill, not NORA)`)
+      const draft = await generateSkillDraft(request, { trace: this.run ?? undefined })
       if (epoch !== this.epoch) return
 
       this.go('DRAFT_READY', { validation, draft }, `${skill.name}: draft ready`)
       await this.pause()
       if (epoch !== this.epoch) return
       this.go('WRITE_APPROVAL', undefined, 'Waiting for write approval; nothing has been written')
+      this.step('approval', 'execute', 'Approval 2: your decision', 'pending', skill.consent ? `Waiting for you to allow access on ${skill.consent.provider}’s screen. Nothing is connected yet` : 'Waiting for you to approve the before and after. Nothing is saved yet')
     } catch (e) {
       this.fail(epoch, e)
     }
@@ -215,10 +275,15 @@ export class NoraEngine {
     const { draft, graph } = this.state
     try {
       this.go('WRITING', undefined, `Approved write: ${skill.name} → actions.ts → mock API`)
+      this.upd('approval', 'pass', skill.consent ? `You allowed access on ${skill.consent.provider}’s screen (Approval 2)` : 'You approved the before and after (Approval 2)')
+      this.step('write', 'update', 'Update data', 'pending', `${skill.id} writes through the mock API`)
       await skill.write!(draft!)
       if (epoch !== this.epoch) return
+      this.upd('write', 'pass', `${skill.id} wrote through the mock API`)
       this.markHandled(skill.id, 'applied')
       this.go('COMPLETED', { previousGraph: graph, graph: buildGraph() }, 'Mock DB updated; graph rebuilt')
+      this.step('graph-update', 'update', 'Update the user graph', 'pass', graphChanges(graph!, this.state.graph!).map((c) => `${c.path} ${c.before} → ${c.after}`).join(', ') || 'No tracked field changed')
+      this.evalAndEnd(skill, 'applied', 'completed', graph!, this.state.graph!)
       await this.pause(2.5) // linger so the graph update is visible
       if (epoch !== this.epoch) return
       this.go('RE_EVALUATING', undefined, 'Re-reading graph and re-evaluating skills')
@@ -238,7 +303,9 @@ export class NoraEngine {
   async acknowledgeInsight(): Promise<void> {
     if (this.state.status !== 'RESULT_READY') return
     const epoch = this.epoch
+    this.upd('approval', 'pass', 'You read it')
     this.markHandled(this.state.selectedSkillId!, 'acknowledged')
+    this.evalAndEnd(this.skill(this.state.selectedSkillId), 'acknowledged', 'completed')
     this.go('COMPLETED', undefined, 'Insight acknowledged (no write)')
     await this.pause()
     if (epoch !== this.epoch) return
@@ -250,7 +317,10 @@ export class NoraEngine {
 
   private async reject(note: string): Promise<void> {
     const epoch = this.epoch
+    if (this.state.status === 'WRITE_APPROVAL') this.upd('approval', 'block', 'You rejected the draft. Nothing was written')
+    // declining at Approval 1 leaves no trace: no run was started
     this.markHandled(this.state.selectedSkillId!, 'rejected')
+    this.evalAndEnd(this.skill(this.state.selectedSkillId), 'rejected', 'declined')
     this.go('REJECTED', undefined, note)
     await this.pause()
     if (epoch !== this.epoch) return
@@ -296,6 +366,8 @@ export class NoraEngine {
   private fail(epoch: number, e: unknown): void {
     if (epoch !== this.epoch) return
     const message = e instanceof Error ? e.message : String(e)
+    this.step('error', 'execute', 'Something went wrong', 'block', message)
+    this.endRun('blocked')
     this.dispatch({ type: 'patch', patch: { error: message }, note: `Error: ${message}` })
     if (canTransition(this.state.status, 'ERROR')) this.go('ERROR')
   }

@@ -17,6 +17,8 @@ export interface AiAnswer {
   actions?: ('referral' | 'reviews')[]
   /** Buttons that open a page, e.g. { label: 'Open Listings', to: '/listings' }. */
   links?: { label: string; to: string }[]
+  /** Buttons that run something in the app (used when a page suggestion is handed to NORA). The first is the main one. */
+  buttons?: { label: string; run: () => void }[]
 }
 
 export const suggestionsFor = (agent: Agent) => {

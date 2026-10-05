@@ -81,7 +81,7 @@ describe('schema.org output', () => {
     const g = (buildSchema(arj(), 'https://x.test') as { '@graph': Record<string, unknown>[] })['@graph']
     const [person, biz] = g as [Record<string, any>, Record<string, any>]
     expect(person['@type']).toBe('Person')
-    expect(person.name).toBe('Agent Arjunan')
+    expect(person.name).toBe('Matt Reeves')
     expect(person.aggregateRating.reviewCount).toBe(3)
     expect(person.url).toBe('https://x.test/profile/arjunan')
     expect(biz['@type']).toContain('LocalBusiness')

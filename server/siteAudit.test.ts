@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import { assertPublicUrl, createSiteAuditHandler, isPrivateIp, matchNap, parseHtml } from './siteAudit.ts'
 
-const PAGE = `<!doctype html><html lang="en-GB"><head><meta charset="utf-8"><title>Agent Arjunan | Mortgage Loan Officer</title>
+const PAGE = `<!doctype html><html lang="en-GB"><head><meta charset="utf-8"><title>Matt Reeves | Mortgage Loan Officer</title>
 <meta name="description" content="Mortgage advice &amp; refinancing in Birmingham."><meta name="robots" content="index, follow">
-<meta property="og:title" content="Arjunan"><meta property="og:image" content="/x.jpg"><meta name="twitter:card" content="summary_large_image">
+<meta property="og:title" content="Matt Reeves"><meta property="og:image" content="/x.jpg"><meta name="twitter:card" content="summary_large_image">
 <script type="application/ld+json">{"@type":"Person","aggregateRating":{"@type":"AggregateRating","ratingValue":4.7,"reviewCount":12}}</script>
-<script>var secret = "ignore me"</script></head><body><h1>Agent Arjunan</h1><p>Call +44 121 555 0142 or visit us in Birmingham.</p></body></html>`
+<script>var secret = "ignore me"</script></head><body><h1>Matt Reeves</h1><p>Call +44 121 555 0142 or visit us in Birmingham.</p></body></html>`
 
 const publicLookup = async () => ['93.184.216.34']
 const html = (body: string, init: ResponseInit = {}) => new Response(body, { status: 200, headers: { 'content-type': 'text/html' }, ...init })
@@ -40,23 +40,23 @@ describe('keeping the fetcher on public addresses', () => {
 describe('reading the page', () => {
   const p = parseHtml(PAGE)
   it('finds the meta tags, language, charset, Open Graph, Twitter card and schema', () => {
-    expect(p).toMatchObject({ title: 'Agent Arjunan | Mortgage Loan Officer', description: 'Mortgage advice & refinancing in Birmingham.', robots: 'index, follow', language: 'en-GB', charset: 'utf-8', twitter: 'summary_large_image', google: '' })
+    expect(p).toMatchObject({ title: 'Matt Reeves | Mortgage Loan Officer', description: 'Mortgage advice & refinancing in Birmingham.', robots: 'index, follow', language: 'en-GB', charset: 'utf-8', twitter: 'summary_large_image', google: '' })
     expect(p.og).toBe('og:title, og:image')
     expect(p.schemaReviews).toEqual({ present: true, count: 12 })
   })
   it('matches name, phone and address in the visible text only', () => {
     expect(p.text).not.toContain('ignore me')
-    expect(matchNap(p.text, { name: 'Agent Arjunan', phone: '+44 121 555 0142', address: 'Birmingham' })).toEqual({ name: true, phone: true, address: true })
+    expect(matchNap(p.text, { name: 'Matt Reeves', phone: '+44 121 555 0142', address: 'Birmingham' })).toEqual({ name: true, phone: true, address: true })
     expect(matchNap(p.text, { name: 'Someone Else', phone: '+44 20 7946 0958', address: 'Leeds' })).toEqual({ name: false, phone: false, address: false })
   })
 })
 
 describe('the audit handler', () => {
   it('returns the page checks, SSL, redirect and PageSpeed results', async () => {
-    const r = await handler(fakeFetch() as never)({ url: 'https://site.test/', nap: { name: 'Agent Arjunan', phone: '+44 121 555 0142', address: 'Birmingham' } })
+    const r = await handler(fakeFetch() as never)({ url: 'https://site.test/', nap: { name: 'Matt Reeves', phone: '+44 121 555 0142', address: 'Birmingham' } })
     expect(r.status).toBe(200)
     const b = r.body as Exclude<typeof r.body, { error: string }>
-    expect(b.page.title).toContain('Arjunan')
+    expect(b.page.title).toContain('Matt Reeves')
     expect(b.nap).toEqual({ name: true, phone: true, address: true })
     expect(b.security).toEqual({ ssl: true, expires: '2027-03-14', httpsRedirect: true })
     expect(b.load).toEqual({ seconds: 2.8, source: 'pagespeed' })

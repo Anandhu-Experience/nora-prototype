@@ -1,22 +1,23 @@
 import { useSyncExternalStore } from 'react'
 
 /**
- * The flow trace: every NORA chat message and AI draft records the steps it went through
- * (input, input guardrails, agent, LLM, output) with a status and a time, so you can see what happened while it runs and after.
+ * The flow trace: every NORA chat message, AI draft and skill run records the steps it went through with a status and a time,
+ * so you can see what happened while it runs and after. A skill run follows NORA's architecture: user graph, analyze, prioritize,
+ * select skill, model routing, guardrails and execute, update data, evals. Chat and plain drafts use input, guardrails, agent, LLM, output.
  * In memory only; the last 30 runs are kept.
  */
-export type Stage = 'input' | 'guardrails' | 'agent' | 'llm' | 'output'
+export type Stage = 'input' | 'guardrails' | 'agent' | 'llm' | 'output' | 'graph' | 'analyze' | 'prioritize' | 'select' | 'routing' | 'execute' | 'update' | 'eval'
 export type StepStatus = 'pending' | 'pass' | 'warn' | 'block' | 'skip' | 'info'
 
 export interface TraceStep { id: string; stage: Stage; label: string; status: StepStatus; detail: string; ms?: number }
 export interface Trace {
   id: string
-  source: 'chat' | 'draft'
+  source: 'chat' | 'draft' | 'run'
   title: string
   at: number
   steps: TraceStep[]
   done: boolean
-  outcome?: 'answered' | 'blocked' | 'ai' | 'template'
+  outcome?: 'answered' | 'blocked' | 'ai' | 'template' | 'completed' | 'declined' | 'superseded'
 }
 interface State { traces: Trace[]; open: boolean; focus: string | null }
 

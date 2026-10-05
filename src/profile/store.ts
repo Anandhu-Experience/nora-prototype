@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import { renameLegacy } from '../presence/legacyNames'
 import { seedState } from './seed'
 import { applyLocks } from './details'
 import { ratingStats } from './selectors'
@@ -10,7 +11,7 @@ function load(): StoreState {
   try {
     const raw = localStorage.getItem(KEY)
     if (raw) {
-      const p = JSON.parse(raw) as { v: number; state: StoreState }
+      const p = JSON.parse(renameLegacy(raw)) as { v: number; state: StoreState }
       if (p.v === 1) return p.state
     }
   } catch {

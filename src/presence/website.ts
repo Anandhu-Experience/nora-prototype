@@ -73,16 +73,16 @@ const origin = typeof window !== 'undefined' ? window.location.origin : ''
 const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {}
 const configured = env.MODE === 'test' ? '' : (env.VITE_SITE_URL ?? '').trim().replace(/\/+$/, '')
 const isLocal = (o: string) => /^https?:\/\/(localhost|127\.|\[::1\])/.test(o)
-export const SEED_URL = configured ? `${configured}/profile/arjunan` : origin && !isLocal(origin) ? `${origin}/profile/arjunan` : 'https://www.newamerican.example/arjunan'
+export const SEED_URL = configured ? `${configured}/profile/arjunan` : origin && !isLocal(origin) ? `${origin}/profile/arjunan` : 'https://www.newamerican.example/matt-reeves'
 const f = (value: string): Field => ({ ok: true, value })
 const none: Field = { ok: false, value: '' }
 
 const SEED_SCAN: Scan = {
-  nap: { name: f('Agent Arjunan'), address: none, phone: f('+44 121 555 0142') },
+  nap: { name: f('Matt Reeves'), address: none, phone: f('+44 121 555 0142') },
   loadTime: 3.1,
   tags: {
     description: none,
-    title: f('Agent Arjunan | Mortgage Loan Officer in Birmingham'),
+    title: f('Matt Reeves | Mortgage Loan Officer in Birmingham'),
     robots: f('index, follow'),
     language: f('en-GB'),
     charset: f('UTF-8'),
@@ -219,7 +219,7 @@ const patch = (p: Partial<WebsiteState>) => websiteStore.set((s) => ({ ...s, ...
 function withFixes(base: Scan, s: WebsiteState): Scan {
   const c: Scan = JSON.parse(JSON.stringify(base))
   const has = (id: string) => s.fixes.includes(id)
-  if (has('nap-name')) c.nap.name = f(c.nap.name.value || 'Agent Arjunan')
+  if (has('nap-name')) c.nap.name = f(c.nap.name.value || 'Matt Reeves')
   if (has('nap-address')) c.nap.address = f('Birmingham, B1 1AA')
   if (has('nap-phone')) c.nap.phone = f(c.nap.phone.value || '+44 121 555 0142')
   if (has('load') && c.loadTime != null) c.loadTime = Math.min(c.loadTime, Math.max(1.8, Math.round((c.loadTime - 1.3) * 10) / 10))

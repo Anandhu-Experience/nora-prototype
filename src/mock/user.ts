@@ -3,7 +3,7 @@ import type { Database, Profile, Listing, Scenario, ScenarioId } from './types'
 
 /** The profile fixtures mirror the Profile page's seed agent, so NORA and the page describe the same person. */
 const arjunan = seedState().agents.arjunan!
-const user = { id: 'user-123', name: 'Arjunan' }
+const user = { id: 'user-123', name: 'Matt Reeves' }
 
 const completeProfile: Profile = {
   name: arjunan.name,
@@ -33,6 +33,7 @@ const base = (): Database => ({
   listings: completeListings(),
   analytics: { visits: 1250, previousVisits: 1200 }, // +4%: not meaningful
   connections: { total: 42, inactive: 2 },
+  accounts: { google: true, points: 55 },
   voce: { hasProfile: false, authorityScore: 0, articles: 0, questionsAnswered: 0 },
 })
 
@@ -46,6 +47,12 @@ const B = (): Database => base()
 const C = (): Database => ({
   ...base(),
   voce: { hasProfile: true, authorityScore: 78, articles: 12, questionsAnswered: 18 },
+})
+
+/** Everything healthy except Google, which is not connected yet: the account NORA should suggest first. */
+const G = (): Database => ({
+  ...base(),
+  accounts: { google: false, points: 25 },
 })
 
 /** Profile gap + incomplete listing + rising traffic: exercises ranking. */
@@ -82,6 +89,12 @@ export const SCENARIOS: Record<ScenarioId, Omit<Scenario, 'data'> & { build: () 
     label: 'VOCE Profile Exists',
     description: 'Everything complete and a VOCE profile is already live.',
     build: C,
+  },
+  'google-needed': {
+    id: 'google-needed',
+    label: 'Google Not Connected',
+    description: 'Everything healthy except Google Business Profile: NORA suggests connecting it.',
+    build: G,
   },
   'multi-action': {
     id: 'multi-action',

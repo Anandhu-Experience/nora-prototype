@@ -4,12 +4,12 @@ import { AI_TASKS, MODEL_CAPS } from '../src/profile/aiTasks.ts'
 import { buildPrompt, buildRequest, createAiDraftHandler, fitBody, fitToLimit, parseArticle, parseBioInput, parseReplyInput, parseServiceCopy, parseServiceInput } from './aiDraft.ts'
 
 const bio = () => ({
-  name: 'Agent Arjunan', title: 'Mortgage Loan Officer', company: 'New American Funding', location: 'Birmingham, UK',
+  name: 'Matt Reeves', title: 'Mortgage Loan Officer', company: 'New American Funding', location: 'Birmingham, UK',
   yearsExperience: 8, completedLoans: 250, specialties: ['Home Loans', 'Refinance'],
   services: [{ name: 'Home Loans', blurb: 'Purchase mortgages' }], rating: { avg: 4.67, count: 3 },
   reviewSnippets: ['Excellent service and great communication.'],
 })
-const reply = () => ({ agentFirstName: 'Arjunan', agentTitle: 'Mortgage Loan Officer', reviewerFirstName: 'John', rating: 5, reviewText: 'Great service!' })
+const reply = () => ({ agentFirstName: 'Matt', agentTitle: 'Mortgage Loan Officer', reviewerFirstName: 'John', rating: 5, reviewText: 'Great service!' })
 
 /** A stand-in for the SDK client that records what it was asked and returns canned text. */
 function fakeClient(text = 'I help clients buy and refinance homes.', extra: Record<string, unknown> = {}) {
@@ -143,7 +143,7 @@ describe('rate limiting', () => {
 })
 
 describe('service copy task', () => {
-  const svc = () => ({ serviceName: 'Refinance', agentFirstName: 'Arjunan', agentTitle: 'Mortgage Loan Officer', location: 'Birmingham, UK', yearsExperience: 8, specialties: ['Home Loans', 'Refinance'], existingTagline: '', existingDescription: '' })
+  const svc = () => ({ serviceName: 'Refinance', agentFirstName: 'Matt', agentTitle: 'Mortgage Loan Officer', location: 'Birmingham, UK', yearsExperience: 8, specialties: ['Home Loans', 'Refinance'], existingTagline: '', existingDescription: '' })
   const copy = 'TAGLINE: Lower your rate or release equity\nDESCRIPTION: I review your current deal, show you what switching could save, and handle the paperwork.'
 
   it('validates its input and rejects an unnamed service', async () => {
@@ -190,7 +190,7 @@ describe('service copy task', () => {
 })
 
 describe('website and AI-visibility tasks', () => {
-  const facts = () => ({ agentFirstName: 'Arjunan', agentTitle: 'Mortgage Loan Officer', location: 'Birmingham, UK', yearsExperience: 8, specialties: ['Home Loans'] })
+  const facts = () => ({ agentFirstName: 'Matt', agentTitle: 'Mortgage Loan Officer', location: 'Birmingham, UK', yearsExperience: 8, specialties: ['Home Loans'] })
 
   it('validates inputs and rejects empty or oversized free text without calling the model', async () => {
     const { client, create } = fakeClient()
@@ -203,7 +203,7 @@ describe('website and AI-visibility tasks', () => {
   })
 
   it('meta returns a description within 155 characters', async () => {
-    const { client } = fakeClient('Arjunan is a mortgage loan officer in Birmingham. '.repeat(6))
+    const { client } = fakeClient('Matt is a mortgage loan officer in Birmingham. '.repeat(6))
     const r = await createAiDraftHandler({ client })({ kind: 'meta', input: { ...facts(), services: ['Home Loans'] } })
     expect(r.status).toBe(200)
     expect(r.body.text!.length).toBeLessThanOrEqual(AI_TASKS.meta.maxChars)

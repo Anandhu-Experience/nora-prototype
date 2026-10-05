@@ -19,6 +19,8 @@ export interface Graph {
   profile: { completeness: number; missing: string[] }
   listings: { total: number; incomplete: number; incompleteIds: string[] }
   connections: { total: number; health: ConnectionHealth }
+  /** Linked accounts that earn Search Rank Score points. */
+  accounts: { google: boolean; points: number }
   analytics: { visits: number; changePct: number; trend: Trend }
   voce: {
     connected: boolean
@@ -54,6 +56,7 @@ export function buildGraphFrom(db: Database): Graph {
       total: db.connections.total,
       health: inactiveRatio > 0.3 ? 'needs-attention' : 'healthy',
     },
+    accounts: { ...db.accounts },
     analytics: { visits, changePct, trend },
     voce: {
       connected: db.voce.hasProfile,

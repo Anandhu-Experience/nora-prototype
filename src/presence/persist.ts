@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import { renameLegacy } from './legacyNames'
 
 /**
  * A tiny persisted external store (same pattern as the Profile store). Each module of the app (listings,
@@ -32,7 +33,7 @@ export function createStore<T>(key: string, seed: () => T): PersistedStore<T> {
   const load = (): T => {
     try {
       const raw = localStorage.getItem(key)
-      if (raw) return JSON.parse(raw) as T
+      if (raw) return JSON.parse(renameLegacy(raw)) as T
     } catch {
       /* storage unavailable or corrupt: use the seed */
     }

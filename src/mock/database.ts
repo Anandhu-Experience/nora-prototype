@@ -3,6 +3,7 @@ import { ratingStats } from '../profile/selectors'
 import type { BioInput } from '../profile/aiTasks'
 import type { Agent } from '../profile/types'
 import type { Database, Profile, ScenarioId } from './types'
+import { connectionsPoints, connectionsStore, isConnected } from '../presence/connections'
 import { DEFAULT_SCENARIO, SCENARIOS } from './user'
 
 /**
@@ -91,5 +92,7 @@ export function getDb(): Database {
 /** Defensive copy for anything outside the API layer (graph builder, debug UI), with the live profile merged in. */
 export function snapshotDatabase(): Database {
   const profile = readProfile()
-  return structuredClone({ ...db, profile, user: { ...db.user, name: profile.name.replace(/^agent\s+/i, '') } })
+  // like the profile, the 'live' scenario reads linked accounts from the Connections page; the demo scenarios use their fixture
+  const accounts = scenario === 'live' ? { google: isConnected(connectionsStore.get(), 'google'), points: connectionsPoints(connectionsStore.get()) } : db.accounts
+  return structuredClone({ ...db, profile, accounts, user: { ...db.user, name: profile.name.replace(/^agent\s+/i, '') } })
 }

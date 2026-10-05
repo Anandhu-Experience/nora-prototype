@@ -106,10 +106,11 @@ export function NoraPanel() {
                     )}
                     {t.answer?.text && <p className="whitespace-pre-line text-slate-700">{t.answer.text}</p>}
                     {t.traceId && <button onClick={() => traceStore.open(t.traceId!)} className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-slate-400 hover:text-blue-600"><Workflow size={12} /> View steps</button>}
-                    {(t.answer?.actions || t.answer?.links) && (
+                    {(t.answer?.actions || t.answer?.links || t.answer?.buttons) && (
                       <div className="mt-3 flex flex-wrap gap-2">
                         {t.answer.actions?.includes('referral') && <button className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:brightness-110" onClick={() => openReferral(viewing.id, t.answer?.text)}>Use as referral</button>}
                         {t.answer.actions?.includes('reviews') && <button className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50" onClick={() => nav(`/profile/${viewing.id}?tab=reviews`)}>View all reviews</button>}
+                        {t.answer.buttons?.map((b, i) => <button key={b.label + i} className={i === 0 ? 'rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:brightness-110' : 'rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50'} onClick={b.run}>{b.label}</button>)}
                         {t.answer.links?.map((l, i) => <button key={l.to + i} className={i === 0 ? 'rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:brightness-110' : 'rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50'} onClick={() => { setOpen(false); nav(l.to) }}>{l.label}</button>)}
                       </div>
                     )}

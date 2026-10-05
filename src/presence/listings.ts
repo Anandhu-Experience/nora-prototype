@@ -27,10 +27,10 @@ export const LOCK_MESSAGE = 'Publishing is locked by your manager. Ask them to u
 const site = (id: string, name: string, status: SiteStatus, extra: Partial<Site> = {}): Site => ({ id, name, status, note: '', publishedAt: '', url: '', ...extra })
 
 export const listingsStore = createStore<ListingsState>('nora-presence-listings-v2', () => ({
-  info: { name: 'Agent Arjunan | New American Funding', address: '45 Colmore Row, Birmingham B3 2BH, UK', phone: '+44 121 496 0123', category: 'Mortgage broker', website: 'https://www.newamericanfunding.com/arjunan', hours: hoursSummary(agentHours(seedState().agents.arjunan!)), serviceArea: 'Birminghm', placeId: 'PENDING' },
+  info: { name: 'Matt Reeves | New American Funding', address: '45 Colmore Row, Birmingham B3 2BH, UK', phone: '+44 121 496 0123', category: 'Mortgage broker', website: 'https://www.newamericanfunding.com/matt-reeves', hours: hoursSummary(agentHours(seedState().agents.arjunan!)), serviceArea: 'Birminghm', placeId: 'PENDING' },
   sites: [
     site('google', 'Google Business Profile', 'ready', { url: 'https://business.google.com' }),
-    site('facebook', 'Facebook', 'published', { publishedAt: '2026-03-14T10:05:00.000Z', url: 'https://facebook.com/agentarjunan' }),
+    site('facebook', 'Facebook', 'published', { publishedAt: '2026-03-14T10:05:00.000Z', url: 'https://facebook.com/mattreeves' }),
     site('yelp', 'Yelp', 'failed', { note: 'Needs phone verification', failsOnce: true, url: 'https://yelp.com' }),
     site('bing', 'Bing Places', 'published', { publishedAt: '2026-04-02T09:00:00.000Z', url: 'https://bingplaces.com' }),
     site('apple', 'Apple Maps', 'published', { publishedAt: '2026-05-21T12:30:00.000Z', url: 'https://maps.apple.com' }),

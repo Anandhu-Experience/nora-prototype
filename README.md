@@ -8,7 +8,7 @@ npm run dev      # http://localhost:5173  (redirects to /login until you sign in
 npm test         # engine, skills, mock layer, profile store, auth
 ```
 
-**Sign in** with the demo account (there is a *Fill demo credentials* button on the login page): `arjunan@newamerican.example` / `demo1234`. Authentication is a mock: one hard-coded account and a flag in `localStorage` (`nora-auth`), so it is not real security. *Sign out* (avatar menu) returns to `/login`. Every route except `/login` requires the session.
+**Sign in** with the demo account (there is a *Fill demo credentials* button on the login page): `matt.reeves@newamerican.example` / `demo1234`. Authentication is a mock: one hard-coded account and a flag in `localStorage` (`nora-auth`), so it is not real security. *Sign out* (avatar menu) returns to `/login`. Every route except `/login` requires the session.
 
 ## Look and feel
 
@@ -18,7 +18,7 @@ A labelled left sidebar of the product modules (a drawer on phones) and a top ba
 
 ## NORA
 
-When you land on the app, suggestions appear as action cards **above the round floating NORA button** in the bottom-right corner (they rise in with a short animation and the button bobs). On a page with its own *NORA suggests* strip these are that page's suggestions, and clicking one does its action (open a form, go to a page, draft with AI). On other pages they are the issues NORA found, and clicking one opens NORA in the centre of the screen with that skill selected. The × hides them on that page for the session. The button opens NORA any time. *Reset demo* brings NORA up immediately.
+When you land on the app, suggestions appear as action cards **above the round floating NORA button** in the bottom-right corner (they rise in with a short animation and the button bobs). On a page with its own *NORA suggests* strip these are that page's suggestions; on other pages they are the issues NORA found. **Every card opens the NORA panel and stays on the page:** an issue opens NORA with that skill selected (Connect Google on the Connections page does too), and any other page suggestion is posted as a message from NORA with one button that does it (open a form, go to a page, draft with AI). The × hides them on that page for the session. The button opens NORA any time. *Reset demo* does not open NORA: it closes the panel and the suggestions reappear above the button.
 
 NORA also appears after the same wait when you **switch to a different person's profile** (it is about to be asked about them, and the greeting says whose profile you are viewing). Opening or minimizing it yourself first cancels that, a second switch restarts the wait, and ordinary page navigation does nothing. It is chat-first:
 
@@ -37,6 +37,8 @@ read profile data → ask every skill "do you apply?" → rank → select
   → Approval 2 (write: before/after, Reject / Approve & Apply) → skill actions.ts → mock API → profile store
   → rebuild graph → re-evaluate → next skill, or "You're all set" + Explore (VOCE)
 ```
+
+**Connect Google (a skill that needs consent).** On login NORA ranks *Connection Setup* first (priority 95) while Google Business Profile is not connected: *Connect Google to unlock Insights. Shall I start?* (+30 points, 25 → 55 of 100). Approval 1 starts it; the draft card then shows the before and after and what Google will ask to allow; the second approval is a mock Google consent screen opened by **Continue to Google**. **Allow** connects Google through the mock API (the Connections page, Search Rank Score and NORA's graph all update) and NORA confirms in the chat. **Cancel** changes nothing and the card stays open to retry; **Reject** drops it. No AI model is used, no real Google account is touched and no password is asked for. The skill is `src/skills/connections/`, the consent screen `src/profile/ui/ConsentModal.tsx`, and a skill opts in with `consent` on the `Skill`.
 
 Reject at either approval and nothing is written. If the profile is edited on the page, NORA notices and re-evaluates by itself.
 
@@ -76,6 +78,14 @@ Besides Profile, the sidebar has the plan's other modules, each a page with mock
 **More AI drafts** (same safeguards as above: server-side prompt, Haiku 4.5, labelled template fallback, nothing saved until you approve): website meta description, AI-visibility article, FAQ answer.
 
 
+## NORA OS
+
+The **NORA OS** sidebar item (`/nora-os`) keeps every issue in one place. Nothing is stored twice: issues are derived from each module's live data (`src/presence/noraOs.ts`), so they vanish as soon as the user fixes them anywhere, and the page only reads.
+
+- **Issues:** open issues from Profile, Connections, Listings, Web Analytics, Reviews (unanswered), AI Visibility and Network, most important first, with the points each would earn, a module filter and an *Open / Resolved* switch. Items NORA can do (Connect Google, add specialties) say so and run through NORA (*Fix with NORA*); the rest open the right page.
+- **Resolved:** the first time an issue is seen and the time it disappeared are kept in the browser (`nora-presence-os-v1`, cleared by Reset demo). An always-on hook in the layout stamps them, so the time is when it was fixed, not when the page was opened.
+- **NORA activity:** what NORA did this session and which skills it handled. Clicking a resolved issue that a NORA skill fixed opens this tab filtered to that skill, and clicking a skill in *Skills handled* filters the log to it (*Show all* clears it).
+
 ## Input guardrails
 
 Everything a person types or pastes goes through four checks before it reaches the AI model or NORA (`src/guardrails/`, plain TypeScript with no dependencies and no cost, shared by the server and the browser):
@@ -85,7 +95,7 @@ Everything a person types or pastes goes through four checks before it reaches t
 3. **Content safety:** threats, hate, sexual content, self-harm, fraud and discriminatory lending are blocked; profanity is starred out.
 4. **Scope validation:** article topics and FAQ questions must be about mortgage or home finance (strict); NORA chat only refuses clearly unrelated requests (lenient).
 
-They run in the draft handler (`server/aiDraft.ts`, authoritative: a blocked request answers 422 `guardrail_blocked` and never reaches the model), in the browser before a draft request, and in NORA chat. A bad review snippet is dropped from a bio request instead of blocking it. **Flow trace:** the **Flow** button in the top bar (and *View steps* under a NORA answer) opens a panel with every chat message and AI draft as a run: input, the four guardrail checks, the agent, the server's second check, the LLM and the output, each with a status and a time. It updates live while a run is in progress and keeps the last 30 (`src/guardrails/trace.ts`). Chat shows the LLM step as skipped, because NORA's chat answers are rule-based. Try it: ask NORA "Write a poem", paste a phone number into the chat, or write an article about pasta. Limits: rules, not a trained classifier, English only; it checks input, not what the model writes.
+They run in the draft handler (`server/aiDraft.ts`, authoritative: a blocked request answers 422 `guardrail_blocked` and never reaches the model), in the browser before a draft request, and in NORA chat. A bad review snippet is dropped from a bio request instead of blocking it. **Flow trace:** the **Flow** button in the top bar (and *View steps* under a NORA answer) opens a panel. A **Skill run** is added only when you pick an action (the start approval); proposals you never act on, and "Not now", leave nothing here. It follows the architecture from the issue to the evals: 1 user graph, 2 analyze, 3 prioritize, 4 select skill (your Approval 1), 5 model routing, 6 guardrails + execute (read, validate, allow-list, checks, draft, Approval 2), 7 update data and the graph, 8 run evals (resolved? expected outcome met? result recorded). Declined, rejected and stopped runs close as *Declined*, and a proposal replaced by a newer one as *Replaced*. Chat messages and AI drafts started from a *Draft with AI* button are shown as their own runs: input, the four guardrail checks, the agent, the server's second check, the LLM and the output, each with a status and a time. It updates live while a run is in progress and keeps the last 30 (`src/guardrails/trace.ts`). Chat shows the LLM step as skipped, because NORA's chat answers are rule-based. Try it: ask NORA "Write a poem", paste a phone number into the chat, or write an article about pasta. Limits: rules, not a trained classifier, English only; it checks input, not what the model writes.
 
 **When NORA has no input box (guided design).** Guardrails protect every place untrusted data enters, not only a chat box:
 
@@ -127,7 +137,8 @@ The profile has a single source of truth, the Profile page store (`src/profile/s
 
 Account menu (avatar, top right) → **NORA demo scenario**:
 
-- **Live (Profile page data)** (default): NORA works on the real profile. Arjunan has 3 specialties (5 needed), so NORA proposes a fix.
+- **Live (Profile page data)** (default): NORA works on the real profile. Google is not connected and Matt has 3 specialties (5 needed), so NORA proposes connecting Google first, then the profile fix.
+- **Google Not Connected**: everything healthy except Google Business Profile, so NORA suggests connecting it.
 - **Profile Needs Improvement**: clears the bio and trims specialties *on the Profile page*.
 - **Everything Complete**: nothing actionable; VOCE create card.
 - **VOCE Profile Exists**: VOCE stats card (78 / 12 / 18).

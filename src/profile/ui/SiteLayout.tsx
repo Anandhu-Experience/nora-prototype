@@ -1,10 +1,11 @@
-import { ArrowRight, Share2, Bell, Building2, ChevronDown, Loader2, MapPin, Menu, Moon, Network, RotateCcw, Search, Sparkles, Sun, BarChart3, TrendingUp, Activity, User, Users, Wrench, X, Bot, type LucideIcon } from 'lucide-react'
+import { ArrowRight, Share2, Bell, Building2, ChevronDown, Loader2, MapPin, Menu, Moon, Network, RotateCcw, Search, Sparkles, Sun, BarChart3, TrendingUp, Activity, User, Users, Wrench, X, Bot, Cpu, type LucideIcon } from 'lucide-react'
 import { SHOW_EXPERTISE_GRAPH } from '../features'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { SCENARIOS, SCENARIO_IDS } from '../../mock/user'
+import { collectIssues, syncIssueHistory, useOsRefresh } from '../../presence/noraOs'
 import { getSkill } from '../../nora/skillRegistry'
-import { NoraProvider, useNora, useNoraPanel, useNoraProcessing, useResetDemo } from '../NoraContext'
+import { NoraProvider, useNora, useNoraChat, useNoraPanel, useNoraProcessing, useResetDemo } from '../NoraContext'
 import { allServices, cities, fmtDate } from '../selectors'
 import { actions, unreadMessages, unreadNotifications, useStore } from '../store'
 import { useTheme } from '../theme'
@@ -28,6 +29,7 @@ interface NavItem {
 /** The sidebar: the product's modules. Messages and notifications live in the top bar and account menu. */
 const NAV_ALL: NavItem[] = [
   { to: '/profile', label: 'Profile & Presence', icon: User },
+  { to: '/nora-os', label: 'NORA OS', icon: Cpu },
   { to: '/graph', label: 'Expertise Graph', icon: Share2 },
   { to: '/listings', label: 'Listings', icon: Building2 },
   { to: '/connections', label: 'Connections', icon: Users },
@@ -337,6 +339,7 @@ function NoraDialog() {
 
 /** What the suggestion says to do, in the user's words. The skill's own name is a fallback. */
 const ACTION_TITLE: Record<string, string> = {
+  'connection-setup': 'Connect Google to unlock Insights',
   'profile-completion': 'Complete your profile',
   'listing-optimization': 'Fix your incomplete listings',
   'web-analytics-insight': 'See what changed in your traffic',
@@ -346,11 +349,14 @@ const readDismissed = (): string[] => { try { return JSON.parse(sessionStorage.g
 
 interface Card { key: string; title: string; detail: string; impact?: string; run: () => void }
 
+/** Page suggestions that are really a NORA skill: the card opens NORA on that skill instead of a chat message. */
+const PAGE_SKILL: Record<string, string> = { google: 'connection-setup' }
+
 /**
  * NORA's launcher: a round floating button in the corner, with suggestions stacked above it. On a page with its own
- * "NORA suggests" strip these are that page's suggestions; otherwise they are the issues NORA found. Each card does its
- * thing (a page suggestion runs; an issue opens NORA with that skill selected). The button spins while NORA works and
- * shows a dot when it needs you.
+ * "NORA suggests" strip these are that page's suggestions; otherwise they are the issues NORA found. Every card opens the
+ * NORA panel: an issue with its skill selected, a page suggestion as a message from NORA with a button that does it.
+ * The button spins while NORA works and shows a dot when it needs you.
  */
 function FloatingNora() {
   const { open, setOpen } = useNoraPanel()
@@ -361,10 +367,17 @@ function FloatingNora() {
   const [dismissed, setDismissed] = useState(readDismissed)
   const needsYou = nora.status === 'SKILL_PROPOSED' || nora.status === 'WRITE_APPROVAL' || nora.status === 'RESULT_READY'
 
+  const chat = useNoraChat()
   const pick = (skillId: string) => { engine.select(skillId); setOpen(true) }
+  /** A page suggestion opens NORA first; the page action is one click away inside it. */
+  const openInNora = (p: { id: string; title: string; detail: string; cta: string; onRun: () => void }) => {
+    const skill = PAGE_SKILL[p.id]
+    if (skill && nora.status === 'SKILL_PROPOSED' && nora.evaluations.some((e) => e.skillId === skill && e.rank)) return pick(skill)
+    chat.askWith(p.title, { intro: p.detail, buttons: [{ label: p.cta, run: () => { setOpen(false); p.onRun() } }] })
+  }
   const issues = nora.status === 'SKILL_PROPOSED' ? [...nora.evaluations].filter((e) => e.rank).sort((a, b) => a.rank! - b.rank!).slice(0, 3) : []
   const cards: Card[] = pageItems.length
-    ? pageItems.slice(0, 3).map((p) => ({ key: p.id, title: p.title, detail: p.detail, impact: p.impact, run: p.onRun }))
+    ? pageItems.slice(0, 3).map((p) => ({ key: p.id, title: p.title, detail: p.detail, impact: p.impact, run: () => openInNora(p) }))
     : issues.map((e) => {
         const outcome = nora.graph ? getSkill(e.skillId)?.expectedOutcome?.(nora.graph) : null
         return { key: e.skillId, title: ACTION_TITLE[e.skillId] ?? e.name, detail: outcome ? `${outcome.label}: ${outcome.before} → ${outcome.after}` : e.reason, run: () => pick(e.skillId) }
@@ -410,10 +423,20 @@ function FloatingNora() {
   )
 }
 
+/** Keeps NORA OS's issue history current from any page, so "resolved" is stamped when the fix happens, not when the page is opened. */
+function IssueHistory() {
+  useOsRefresh()
+  const state = useStore()
+  const agent = state.agents[state.viewerId]
+  useEffect(() => { if (agent) syncIssueHistory(collectIssues(agent)) })
+  return null
+}
+
 function Shell() {
   const { open } = useNoraPanel()
   return (
     <div className="flex min-h-screen bg-slate-100">
+      <IssueHistory />
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar />

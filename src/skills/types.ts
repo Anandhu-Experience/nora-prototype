@@ -74,6 +74,16 @@ export interface DraftRequest {
   }
 }
 
+/** What the user is asked to allow on the provider's screen. */
+export interface ConsentRequest {
+  provider: string
+  /** Button on the NORA card that opens the provider's screen. */
+  cta: string
+  permissions: string[]
+  /** The account the access is for, as the provider shows it. */
+  account: string
+}
+
 export interface Insight {
   title: string
   body: string
@@ -96,12 +106,17 @@ export interface Skill {
   id: string
   name: string
   description: string
-  domain: 'profile' | 'listings' | 'analytics' | 'voce'
+  domain: 'profile' | 'connections' | 'listings' | 'analytics' | 'voce'
   kind: SkillKind
   /** Higher runs first. Explore skills sit at the bottom so they only surface when nothing else applies. */
   priority: number
   allowedModel: AllowedModel
   requiresApproval: boolean
+  /**
+   * Set when the write needs the user to grant access on another service's own screen (OAuth). The panel then asks
+   * for that consent instead of a plain "Approve & Apply", and the write only runs once it is granted.
+   */
+  consent?: ConsentRequest
   /** Mirrors SKILL.md. */
   whenToUse: string[]
   whenNotToUse: string[]

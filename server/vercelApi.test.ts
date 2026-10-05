@@ -20,7 +20,7 @@ describe('the server-rendered public profile', () => {
   const out = renderProfileHtml(INDEX, a, 'https://app.vercel.app')
 
   it('puts a real title, description, canonical, Open Graph and Twitter tags in the head', () => {
-    expect(out).toContain('<title>Agent Arjunan | Mortgage Loan Officer in Birmingham</title>')
+    expect(out).toContain('<title>Matt Reeves | Mortgage Loan Officer in Birmingham</title>')
     expect(out).toContain('<meta name="description" content="Dedicated mortgage loan officer')
     expect(out).toContain('<link rel="canonical" href="https://app.vercel.app/profile/arjunan" />')
     expect(out).toContain('property="og:title"')
@@ -40,7 +40,7 @@ describe('the server-rendered public profile', () => {
   })
 
   it('puts the profile text where a crawler that skips JavaScript will read it, and keeps the app script', () => {
-    expect(out).toMatch(/<div id="root"><main><article><h1>Agent Arjunan<\/h1>/)
+    expect(out).toMatch(/<div id="root"><main><article><h1>Matt Reeves<\/h1>/)
     expect(out).toContain('+44 121 555 0142')
     expect(out).toContain('Birmingham')
     expect(out).toContain('<script type="module" src="/assets/index.js"></script>')
@@ -90,7 +90,7 @@ describe('the bundled Vercel functions (api/)', () => {
     const ok = await call('/api/profile?id=arjunan')
     expect(ok.status).toBe(200)
     expect(ok.headers.get('content-type')).toMatch(/text\/html/)
-    expect(await ok.text()).toContain('<title>Agent Arjunan | Mortgage Loan Officer in Birmingham</title>')
+    expect(await ok.text()).toContain('<title>Matt Reeves | Mortgage Loan Officer in Birmingham</title>')
     const unknown = await call('/api/profile?id=nobody')
     expect(await unknown.text()).toContain('<title>nora-prototype</title>')
   })

@@ -87,8 +87,8 @@ describe('assistant', () => {
   it('drafts differ by tone and variant', () => {
     const f = draftMessage(arj(), { purpose: 'referral', tone: 'friendly' })
     const p = draftMessage(arj(), { purpose: 'referral', tone: 'professional' })
-    expect(f).toContain('Hi Arjunan')
-    expect(p).toContain('Dear Arjunan')
+    expect(f).toContain('Hi Matt')
+    expect(p).toContain('Dear Matt')
     expect(draftMessage(arj(), { purpose: 'referral', tone: 'friendly', variant: 1 })).not.toBe(f)
   })
 })
@@ -101,6 +101,6 @@ describe('selectors', () => {
   })
   it('insights and vcard are derived from data', () => {
     expect(insightsFor(arj()).map((i) => i.text)).toContain('Typically responds within 1 hour')
-    expect(vcard(arj())).toContain('FN:Agent Arjunan')
+    expect(vcard(arj())).toContain('FN:Matt Reeves')
   })
 })

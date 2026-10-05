@@ -16,7 +16,7 @@ const noSocial = { linkedin: '', twitter: '', facebook: '', website: '' }
 
 const arjunan: Agent = {
   id: 'arjunan',
-  name: 'Agent Arjunan',
+  name: 'Matt Reeves',
   title: 'Mortgage Loan Officer',
   nmls: '1234567',
   company: 'New American Funding',
@@ -48,7 +48,7 @@ const arjunan: Agent = {
   ],
   reviews: [
     rev('r1', 'John Doe', 5, '2024-01-12', 'Excellent service and great communication throughout the process. Highly recommended!', undefined, 'Google'),
-    rev('r2', 'Sarah Mitchell', 5, '2023-11-03', 'Arjunan found us a rate well below what our bank offered and was always quick to reply. Made buying our first home stress-free.', 'Thank you Sarah, congratulations on the new home!', 'Facebook'),
+    rev('r2', 'Sarah Mitchell', 5, '2023-11-03', 'Matt found us a rate well below what our bank offered and was always quick to reply. Made buying our first home stress-free.', 'Thank you Sarah, congratulations on the new home!', 'Facebook'),
     rev('r3', 'Tom Baker', 4, '2023-09-21', 'Very knowledgeable and professional. The refinance took a little longer than expected but the result was great.'),
   ],
   yearsExperience: 8,
@@ -56,8 +56,8 @@ const arjunan: Agent = {
   responseRate: 98,
   responseTime: '1 hour',
   phone: '+44 121 555 0142',
-  email: 'arjunan@newamerican.example',
-  social: { linkedin: 'https://linkedin.com/in/agent-arjunan', twitter: 'https://x.com/agentarjunan', facebook: '', website: 'https://arjunan.example.com' },
+  email: 'matt.reeves@newamerican.example',
+  social: { linkedin: 'https://linkedin.com/in/matt-reeves', twitter: 'https://x.com/mattreeves', facebook: '', website: 'https://mattreeves.example.com' },
   addresses: [
     { id: 'addr1', label: 'Main office', street: '45 Colmore Row', city: 'Birmingham', region: 'UK', postal: 'B3 2BH', amenities: ['parking', 'step-free', 'private-room', 'wifi', 'transit'] },
     { id: 'addr2', label: 'Solihull branch', street: '12 Poplar Road', city: 'Solihull', region: 'UK', postal: 'B91 3AE', amenities: ['parking', 'evenings', 'home-visits'] },
@@ -170,7 +170,7 @@ export function seedState(): StoreState {
     threads: [
       {
         id: 't-sofia', withName: 'Sofia Marin', withAgentId: 'sofia-marin', unread: true,
-        messages: [{ id: 'm1', from: 'them', at: '2024-01-14T09:30:00Z', text: 'Hi Arjunan, do you handle first-time buyer referrals in Birmingham? I have a client moving up from London.' }],
+        messages: [{ id: 'm1', from: 'them', at: '2024-01-14T09:30:00Z', text: 'Hi Matt, do you handle first-time buyer referrals in Birmingham? I have a client moving up from London.' }],
       },
       {
         id: 't-priya', withName: 'Priya Nair', withAgentId: 'priya-nair', unread: false,

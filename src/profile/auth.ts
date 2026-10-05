@@ -4,7 +4,7 @@ import { useSyncExternalStore } from 'react'
  * Mock authentication for the prototype: there is no server. One demo account, and the
  * "session" is a flag in localStorage. Not real security; do not reuse.
  */
-export const DEMO_ACCOUNT = { email: 'arjunan@newamerican.example', password: 'demo1234' } as const
+export const DEMO_ACCOUNT = { email: 'matt.reeves@newamerican.example', password: 'demo1234' } as const
 
 const KEY = 'nora-auth'
 const listeners = new Set<() => void>()

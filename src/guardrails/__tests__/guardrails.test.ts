@@ -124,7 +124,7 @@ describe('4. scope validation', () => {
 })
 
 describe('guardInput (AI draft requests)', () => {
-  const facts = { agentFirstName: 'Arjunan', agentTitle: 'Mortgage Loan Officer', location: 'Birmingham, UK', yearsExperience: 8, specialties: ['Home Loans'] }
+  const facts = { agentFirstName: 'Matt', agentTitle: 'Mortgage Loan Officer', location: 'Birmingham, UK', yearsExperience: 8, specialties: ['Home Loans'] }
 
   it('masks review text, keeps the rest, and does not touch the original', () => {
     const input = { agentFirstName: 'A', agentTitle: 'LO', reviewerFirstName: 'Dana', rating: 5, reviewText: 'Great! Call me on 0121 496 0123 or dana@mail.com' }

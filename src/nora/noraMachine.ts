@@ -62,6 +62,8 @@ export interface LogEntry {
   message: string
   /** Set on entries that record a state transition. */
   status?: NoraStatus
+  /** The skill the entry is about, when one was selected at the time. */
+  skillId?: string | null
 }
 
 export type Outcome = 'applied' | 'rejected' | 'acknowledged' | 'nothing-to-do'
@@ -109,8 +111,8 @@ export type NoraAction =
   | { type: 'transition'; to: NoraStatus; patch?: Partial<NoraState>; note?: string }
   | { type: 'patch'; patch: Partial<NoraState>; note?: string }
 
-const withLog = (s: NoraState, note?: string, status?: NoraStatus): LogEntry[] =>
-  note ? [...s.log, { at: Date.now(), message: note, status }] : s.log
+const withLog = (s: NoraState, note?: string, status?: NoraStatus, skillId?: string | null): LogEntry[] =>
+  note ? [...s.log, { at: Date.now(), message: note, status, skillId: skillId ?? null }] : s.log
 
 export function noraReducer(state: NoraState, action: NoraAction): NoraState {
   switch (action.type) {
@@ -122,9 +124,9 @@ export function noraReducer(state: NoraState, action: NoraAction): NoraState {
         ...state,
         ...action.patch,
         status: action.to,
-        log: withLog(state, action.note ?? `${state.status} → ${action.to}`, action.to),
+        log: withLog(state, action.note ?? `${state.status} → ${action.to}`, action.to, action.patch?.selectedSkillId ?? state.selectedSkillId),
       }
     case 'patch':
-      return { ...state, ...action.patch, log: withLog(state, action.note) }
+      return { ...state, ...action.patch, log: withLog(state, action.note, undefined, action.patch.selectedSkillId ?? state.selectedSkillId) }
   }
 }

@@ -2,7 +2,11 @@ import { AlertTriangle, Check, ChevronDown, Info, Loader2, Minus, ShieldX, Trash
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { isRunning, traceStore, type Stage, type StepStatus, type Trace } from '../../guardrails/trace'
 
-const STAGE: Record<Stage, string> = { input: 'Input / chatbot', guardrails: 'Input guardrails', agent: 'Agent', llm: 'LLM', output: 'Output' }
+const STAGE: Record<Stage, string> = {
+  input: 'Input / chatbot', guardrails: 'Input guardrails', agent: 'Agent', llm: 'LLM', output: 'Output',
+  graph: '1 · User graph', analyze: '2 · Analyze user data', prioritize: '3 · Prioritize issues', select: '4 · Select skill', routing: '5 · Model routing',
+  execute: '6 · Guardrails + execute skill', update: '7 · Update data', eval: '8 · Run evals',
+}
 
 const ICON: Record<StepStatus, { icon: typeof Check; tone: string; label: string }> = {
   pending: { icon: Loader2, tone: 'bg-slate-100 text-slate-500', label: 'Running' },
@@ -18,6 +22,9 @@ const OUTCOME: Record<NonNullable<Trace['outcome']>, { label: string; tone: stri
   ai: { label: 'AI draft', tone: 'bg-emerald-50 text-emerald-700' },
   template: { label: 'Template', tone: 'bg-amber-50 text-amber-700' },
   blocked: { label: 'Blocked', tone: 'bg-rose-50 text-rose-700' },
+  completed: { label: 'Completed', tone: 'bg-emerald-50 text-emerald-700' },
+  declined: { label: 'Declined', tone: 'bg-slate-100 text-slate-600' },
+  superseded: { label: 'Replaced', tone: 'bg-slate-100 text-slate-500' },
 }
 
 function TraceCard({ trace, open, onToggle }: { trace: Trace; open: boolean; onToggle: () => void }) {
@@ -27,7 +34,7 @@ function TraceCard({ trace, open, onToggle }: { trace: Trace; open: boolean; onT
   return (
     <li ref={ref} className="rounded-xl border border-slate-200 bg-white">
       <button onClick={onToggle} aria-expanded={open} className="flex w-full items-center gap-2 px-3.5 py-3 text-left">
-        <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">{trace.source === 'chat' ? 'Chat' : 'Draft'}</span>
+        <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">{trace.source === 'chat' ? 'Chat' : trace.source === 'run' ? 'Skill run' : 'Draft'}</span>
         <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-900">{trace.title}</span>
         {trace.done ? trace.outcome && <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${OUTCOME[trace.outcome].tone}`}>{OUTCOME[trace.outcome].label}</span> : <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700"><Loader2 size={11} className="animate-spin" /> Running</span>}
         <ChevronDown size={16} className={`shrink-0 text-slate-400 transition ${open ? 'rotate-180' : ''}`} />
@@ -57,7 +64,7 @@ function TraceCard({ trace, open, onToggle }: { trace: Trace; open: boolean; onT
   )
 }
 
-/** Right-hand panel with the flow of every chat message and AI draft: input, guardrails, agent, LLM, output. Live while running, kept after. */
+/** Right-hand panel with the flow of every skill run (issue to evals), chat message and AI draft. Live while running, kept after. */
 export function TraceDrawer() {
   const { traces, open, focus } = traceStore.use()
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
@@ -73,13 +80,13 @@ export function TraceDrawer() {
     <aside role="complementary" aria-label="Flow trace" className="fixed inset-y-0 right-0 z-[55] flex w-full max-w-[420px] flex-col border-l border-slate-200 bg-slate-50 shadow-2xl">
       <header className="flex items-center gap-2 border-b border-slate-200 bg-white px-4 py-3">
         <Workflow size={18} className="text-blue-600" />
-        <div className="min-w-0 flex-1"><h2 className="text-[15px] font-semibold text-slate-900">Flow trace</h2><p className="text-xs text-slate-500">Input → guardrails → agent → LLM → output</p></div>
+        <div className="min-w-0 flex-1"><h2 className="text-[15px] font-semibold text-slate-900">Flow trace</h2><p className="text-xs text-slate-500">Issue → skill → guardrails → execute → update → evals</p></div>
         <button onClick={() => traceStore.clear()} aria-label="Clear trace" title="Clear" className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"><Trash2 size={16} /></button>
         <button onClick={() => traceStore.close()} aria-label="Close flow trace" className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"><X size={18} /></button>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {traces.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">Nothing yet. Send a message to NORA or use a "Draft with AI" button and the steps appear here as they run.</div>
+          <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">Nothing yet. Pick an action NORA suggests, send it a message or use a "Draft with AI" button and the steps appear here as they run.</div>
         ) : (
           <ul className="space-y-2.5">{traces.map((t, i) => <TraceCard key={t.id} trace={t} open={isOpen(t, i)} onToggle={() => setExpanded((m) => ({ ...m, [t.id]: !isOpen(t, i) }))} />)}</ul>
         )}

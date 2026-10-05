@@ -8,6 +8,7 @@ import { NoraEngine } from '../nora/noraEngine'
 import type { NoraState, NoraStatus } from '../nora/noraMachine'
 import { getSkill } from '../nora/skillRegistry'
 import { answer, intentOf, type AiAnswer } from './assistant'
+import { connectionsStore } from '../presence/connections'
 import { resetPresence } from '../presence/persist'
 import { actions as profileActions, getState as getProfileState, subscribe as subscribeProfile, useStore } from './store'
 import type { Agent } from './types'
@@ -72,11 +73,14 @@ export function NoraProvider({ children }: { children: ReactNode }) {
     void engine.reset(DEFAULT_SCENARIO)
   }, [engine])
   useEffect(() => {
-    return subscribeProfile(() => {
+    const recheck = () => {
       const s = engine.getState()
       if (s.status !== 'SKILL_PROPOSED' && s.status !== 'EXPLORE') return
       if (JSON.stringify(buildGraph()) !== JSON.stringify(s.graph)) void engine.refresh()
-    })
+    }
+    // the Profile page and the Connections page both feed NORA's graph, so a change on either re-checks it
+    const offs = [subscribeProfile(recheck), connectionsStore.subscribe(recheck)]
+    return () => offs.forEach((off) => off())
   }, [engine])
 
   const processing = PROCESSING.has(nora.status)
@@ -211,8 +215,21 @@ export function NoraProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const changed = nora.status !== lastStatus.current
     lastStatus.current = nora.status
+    // connecting an account is confirmed in the chat however the run was started, so the result outlasts the card
+    if (changed && nora.status === 'COMPLETED') {
+      const consent = getSkill(nora.lastOutcome?.skillId ?? '')?.consent
+      if (consent && nora.lastOutcome?.outcome === 'applied') {
+        const pts = nora.previousGraph && nora.graph ? ` Connection points ${nora.previousGraph.accounts.points} → ${nora.graph.accounts.points} of 100.` : ''
+        say(`Done. ${consent.provider} is connected.${pts} You can manage it any time on Connections.`)
+        fixing.current = false
+        return
+      }
+    }
     if (!changed || !fixing.current) return
-    if (nora.status === 'WRITE_APPROVAL') say('The draft is ready. Review the before and after in the card above, then approve to apply it.')
+    if (nora.status === 'WRITE_APPROVAL') {
+      const consent = getSkill(nora.selectedSkillId ?? '')?.consent
+      say(consent ? `Ready. Click “${consent.cta}” in the card above and ${consent.provider} will ask you to allow access. Nothing is connected until you do.` : 'The draft is ready. Review the before and after in the card above, then approve to apply it.')
+    }
     else if (nora.status === 'COMPLETED') {
       const changes = nora.previousGraph && nora.graph ? graphChanges(nora.previousGraph, nora.graph) : []
       say(changes.length ? `Done. ${changes.map((c) => `${c.path} ${c.before} → ${c.after}`).join(', ')}.` : 'Done.')
@@ -237,8 +254,8 @@ export function NoraProvider({ children }: { children: ReactNode }) {
     resetPresence()
     clear()
     fixing.current = false
+    setOpen(false) // a fresh start: NORA's suggestions reappear above the floating button instead of opening the panel
     void engine.reset(DEFAULT_SCENARIO)
-    setOpen(true) // a reset is a fresh start: NORA greets again
   }, [engine, clear])
   const openReferral = useCallback((id: string, text?: string) => setReferral({ agentId: id, text }), [])
   const chat = useMemo<Chat>(() => ({ agent, turns, pending, ask, askWith, clear }), [agent, turns, pending, ask, askWith, clear])

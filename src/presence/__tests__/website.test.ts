@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { setLatency } from '../persist'
 import { buildReportHtml, normalizeUrl, recommendedTag, verifyOutcome, websiteAnswer, websiteIssues, websiteActions, websiteParameters, websitePoints, websiteStore, WEBSITE_MAX, scanFromAudit, SEED_URL } from '../website'
 
-const agent = { name: 'Agent Arjunan', title: 'Mortgage Loan Officer', city: 'Birmingham', phone: '+44 121 555 0142' }
+const agent = { name: 'Matt Reeves', title: 'Mortgage Loan Officer', city: 'Birmingham', phone: '+44 121 555 0142' }
 
 beforeEach(() => {
   setLatency(0)
@@ -49,7 +49,7 @@ describe('urls and verification', () => {
   })
 
   it('verifies example hosts straight away and scans', async () => {
-    websiteActions.saveUrl('arjunan.example.com')
+    websiteActions.saveUrl('mattreeves.example.com')
     expect(websitePoints(websiteStore.get())).toBe(0)
     expect(await websiteActions.verify(agent)).toBe(true)
     expect(websitePoints(websiteStore.get())).toBeGreaterThan(0)
@@ -79,7 +79,7 @@ describe('fixes', () => {
 
 describe('report and NORA', () => {
   it('the report has the score and recommendations', () => {
-    const html = buildReportHtml(websiteStore.get(), 'Agent Arjunan', '2026-10-02T00:00:00.000Z')
+    const html = buildReportHtml(websiteStore.get(), 'Matt Reeves', '2026-10-02T00:00:00.000Z')
     expect(html).toContain('149')
     expect(html).toContain('Meta description')
     expect(html).toContain('Recommendations')
@@ -99,11 +99,11 @@ describe('mapping a live audit onto the page', () => {
       page: { title: 'T', description: '', robots: 'index', language: 'en', charset: 'utf-8', og: '', google: '', twitter: '' },
       nap: { name: true, phone: false, address: false }, reviews: { widget: false, schema: true, count: 12 },
       security: { ssl: true, expires: '2027-03-14', httpsRedirect: false }, load: { seconds: null }, lighthouse: null, notes: [],
-    }, { name: 'Agent Arjunan', phone: '+44 1', city: 'Birmingham' })
+    }, { name: 'Matt Reeves', phone: '+44 1', city: 'Birmingham' })
     expect(scan.loadTime).toBeNull()
     expect(scan.tags.title.ok).toBe(true)
     expect(scan.tags.description.ok).toBe(false)
-    expect(scan.nap.name).toEqual({ ok: true, value: 'Agent Arjunan' })
+    expect(scan.nap.name).toEqual({ ok: true, value: 'Matt Reeves' })
     expect(scan.nap.phone.ok).toBe(false)
     expect(scan.reviews).toEqual({ widget: false, schema: true, count: 12 })
   })

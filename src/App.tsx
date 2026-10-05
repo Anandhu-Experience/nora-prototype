@@ -14,6 +14,7 @@ const InsightsPage = lazy(() => import('./profile/pages/InsightsPage'))
 const RankPage = lazy(() => import('./profile/pages/RankPage'))
 const ListingsPage = lazy(() => import('./profile/pages/ListingsPage'))
 const ConnectionsPage = lazy(() => import('./profile/pages/ConnectionsPage'))
+const NoraOsPage = lazy(() => import('./profile/pages/NoraOsPage'))
 const WebAnalyticsPage = lazy(() => import('./profile/pages/WebAnalyticsPage'))
 const GraphPage = lazy(() => import('./profile/pages/GraphPage'))
 const SrsGuidePage = lazy(() => import('./profile/pages/SrsGuidePage'))
@@ -43,6 +44,7 @@ export default function App() {
             <Route path="/connections" element={<ConnectionsPage />} />
             <Route path="/analytics" element={<WebAnalyticsPage />} />
             <Route path="/search-rank" element={<SearchRankPage />} />
+            <Route path="/nora-os" element={<NoraOsPage />} />
             <Route path="/graph" element={SHOW_EXPERTISE_GRAPH ? <GraphPage /> : <Navigate to="/profile" replace />} />
             <Route path="/search-rank/how-it-works" element={<SrsGuidePage />} />
             <Route path="/ai-visibility" element={<AiVisibilityPage />} />

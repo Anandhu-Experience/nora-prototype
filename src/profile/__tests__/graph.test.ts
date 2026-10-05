@@ -6,7 +6,7 @@ beforeEach(() => actions.reset())
 const arj = () => getState().agents.arjunan!
 
 const CTX: GraphContext = {
-  connected: [{ id: 'facebook', name: 'Facebook', handle: 'facebook.com/agentarjunan', oauth: true }, { id: 'yelp', name: 'Yelp', handle: '', oauth: false }],
+  connected: [{ id: 'facebook', name: 'Facebook', handle: 'facebook.com/mattreeves', oauth: true }, { id: 'yelp', name: 'Yelp', handle: '', oauth: false }],
   publishedListings: [{ id: 'g', name: 'Google Business Profile' }],
   articles: [{ id: 'a1', title: 'First-time buyer checklist' }],
   answeredFaqs: 2,

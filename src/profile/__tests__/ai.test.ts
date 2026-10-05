@@ -96,7 +96,7 @@ describe('profile skill: the AI writes the bio, nothing else', () => {
 
 describe('NORA end to end with an AI-written bio', () => {
   it('shows the AI text for approval, writes nothing until approved, then saves it to the profile', async () => {
-    vi.stubGlobal('fetch', ok('Warm, specific AI bio for Arjunan.'))
+    vi.stubGlobal('fetch', ok('Warm, specific AI bio for Matt.'))
     const e = new NoraEngine({ stepDelayMs: 0 })
     await e.reset('profile-needed')
     const before = snapshotDatabase()
@@ -104,11 +104,11 @@ describe('NORA end to end with an AI-written bio', () => {
     const s = e.getState()
     expect(s.status).toBe('WRITE_APPROVAL')
     expect(s.draft!.source).toBe('ai')
-    expect(s.draft!.changes[0]!.after).toBe('Warm, specific AI bio for Arjunan.')
+    expect(s.draft!.changes[0]!.after).toBe('Warm, specific AI bio for Matt.')
     expect(snapshotDatabase()).toEqual(before) // the AI call changed nothing
 
     await e.approveWrite()
-    expect(arj().about).toBe('Warm, specific AI bio for Arjunan.')
+    expect(arj().about).toBe('Warm, specific AI bio for Matt.')
     expect(arj().activity[0]!.text).toBe('NORA updated your bio and specialties')
   })
 
@@ -142,7 +142,7 @@ describe('review reply drafts', () => {
     expect(d).toMatchObject({ text: 'Thank you John, glad it went smoothly.', source: 'ai', model: 'claude-opus-5-5' })
     const sent = JSON.parse(String(((fetchImpl.mock.calls[0] as unknown as [string, RequestInit])[1]).body))
     expect(sent.kind).toBe('review-reply')
-    expect(sent.input).toMatchObject({ reviewerFirstName: 'John', rating: 5, agentFirstName: 'Arjunan' })
+    expect(sent.input).toMatchObject({ reviewerFirstName: 'John', rating: 5, agentFirstName: 'Matt' })
     expect(sent.input).not.toHaveProperty('reviewerFullName')
   })
 
@@ -172,7 +172,7 @@ describe('service copy drafts', () => {
     expect(d).toMatchObject({ blurb: 'Lower your rate', description: 'I review your deal and handle the switch.', source: 'ai', model: 'claude-haiku-4-5-20251001' })
     const sent = JSON.parse(String(((fetchImpl.mock.calls[0] as unknown as [string, RequestInit])[1]).body))
     expect(sent.kind).toBe('service')
-    expect(sent.input).toMatchObject({ serviceName: 'Refinance', agentFirstName: 'Arjunan', yearsExperience: 8 })
+    expect(sent.input).toMatchObject({ serviceName: 'Refinance', agentFirstName: 'Matt', yearsExperience: 8 })
     expect(sent.input.existingTagline).toBe(svc().blurb)
     expect(JSON.stringify(sent)).not.toMatch(/@|\+44/) // no contact details
   })

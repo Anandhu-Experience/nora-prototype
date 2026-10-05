@@ -1,6 +1,7 @@
-import { getDb, readBioFacts, readProfile, writeProfile } from './database'
+import { connect, connectionMeta } from '../presence/connections'
+import { getDb, readBioFacts, readProfile, snapshotDatabase, writeProfile } from './database'
 import type { BioInput } from '../profile/aiTasks'
-import type { Analytics, Connections, Listing, Profile, VoceAccount } from './types'
+import type { Accounts, Analytics, Connections, Listing, Profile, VoceAccount } from './types'
 
 /**
  * Mock services standing in for the existing Profile / Listings / Analytics /
@@ -53,6 +54,24 @@ export async function getAnalytics(): Promise<Analytics> {
 export async function getConnections(): Promise<Connections> {
   await delay()
   return copy(getDb().connections)
+}
+
+/** Linked accounts and the points they earn. The live scenario reads the Connections page, the demo scenarios their fixture. */
+export async function getAccounts(): Promise<Accounts> {
+  await delay()
+  return snapshotDatabase().accounts
+}
+
+/**
+ * Connect Google. Callers must only reach this after the user granted access on Google's consent screen.
+ * Writes the Connections page (what the user sees) and the scenario fixture (what the demo scenarios read).
+ */
+export async function connectGoogle(): Promise<Accounts> {
+  await delay()
+  await connect('google')
+  const db = getDb()
+  if (!db.accounts.google) db.accounts = { google: true, points: db.accounts.points + connectionMeta('google').points }
+  return snapshotDatabase().accounts
 }
 
 export async function getVoce(): Promise<VoceAccount> {

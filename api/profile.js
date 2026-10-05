@@ -249,7 +249,7 @@ const noSocial = {
 };
 const arjunan = {
 	id: "arjunan",
-	name: "Agent Arjunan",
+	name: "Matt Reeves",
 	title: "Mortgage Loan Officer",
 	nmls: "1234567",
 	company: "New American Funding",
@@ -284,7 +284,7 @@ const arjunan = {
 	],
 	reviews: [
 		rev("r1", "John Doe", 5, "2024-01-12", "Excellent service and great communication throughout the process. Highly recommended!", void 0, "Google"),
-		rev("r2", "Sarah Mitchell", 5, "2023-11-03", "Arjunan found us a rate well below what our bank offered and was always quick to reply. Made buying our first home stress-free.", "Thank you Sarah, congratulations on the new home!", "Facebook"),
+		rev("r2", "Sarah Mitchell", 5, "2023-11-03", "Matt found us a rate well below what our bank offered and was always quick to reply. Made buying our first home stress-free.", "Thank you Sarah, congratulations on the new home!", "Facebook"),
 		rev("r3", "Tom Baker", 4, "2023-09-21", "Very knowledgeable and professional. The refinance took a little longer than expected but the result was great.")
 	],
 	yearsExperience: 8,
@@ -292,12 +292,12 @@ const arjunan = {
 	responseRate: 98,
 	responseTime: "1 hour",
 	phone: "+44 121 555 0142",
-	email: "arjunan@newamerican.example",
+	email: "matt.reeves@newamerican.example",
 	social: {
-		linkedin: "https://linkedin.com/in/agent-arjunan",
-		twitter: "https://x.com/agentarjunan",
+		linkedin: "https://linkedin.com/in/matt-reeves",
+		twitter: "https://x.com/mattreeves",
 		facebook: "",
-		website: "https://arjunan.example.com"
+		website: "https://mattreeves.example.com"
 	},
 	addresses: [{
 		id: "addr1",
@@ -529,7 +529,7 @@ function seedState() {
 				id: "m1",
 				from: "them",
 				at: "2024-01-14T09:30:00Z",
-				text: "Hi Arjunan, do you handle first-time buyer referrals in Birmingham? I have a client moving up from London."
+				text: "Hi Matt, do you handle first-time buyer referrals in Birmingham? I have a client moving up from London."
 			}]
 		}, {
 			id: "t-priya",
