@@ -48,7 +48,6 @@ interface Ctx {
 }
 
 const NoraCtx = createContext<Ctx | null>(null)
-const GREETED = 'nora-greeted'
 /** How long after login (or after switching to someone else's profile) NORA waits before appearing. */
 export const GREET_DELAY_MS = 5000
 
@@ -62,20 +61,9 @@ const PROCESSING = new Set<NoraStatus>(['SKILL_APPROVED', 'READING', 'VALIDATING
 export function NoraProvider({ children }: { children: ReactNode }) {
   const [engine] = useState(() => new NoraEngine())
   const nora = useSyncExternalStore(engine.subscribe, engine.getState)
-  // NORA greets the user in the centre of the screen a few seconds after login, once per session
-  // (refreshing keeps it minimized). Opening or minimizing it yourself first cancels the greeting.
+  // Landing on the app no longer pops NORA open: the issues it found appear above the floating NORA button instead,
+  // and picking one opens NORA with that skill selected.
   const [open, setOpen] = useState(false)
-  useEffect(() => {
-    if (open) try { sessionStorage.setItem(GREETED, '1') } catch { /* storage unavailable */ }
-  }, [open])
-  useEffect(() => {
-    try { if (sessionStorage.getItem(GREETED) === '1') return } catch { /* greet anyway */ }
-    const t = setTimeout(() => {
-      try { if (sessionStorage.getItem(GREETED) === '1') return } catch { /* greet anyway */ }
-      setOpen(true)
-    }, GREET_DELAY_MS)
-    return () => clearTimeout(t)
-  }, [])
   const [referral, setReferral] = useState<{ agentId: string; text?: string } | null>(null)
   const [focusTick, setFocusTick] = useState(0)
 

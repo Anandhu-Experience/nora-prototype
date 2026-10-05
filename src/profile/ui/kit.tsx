@@ -1,7 +1,8 @@
 import { Sparkles, type LucideIcon } from 'lucide-react'
-import { useId, type ReactNode } from 'react'
+import { useEffect, useId, type ReactNode } from 'react'
 import { useNoraChat } from '../NoraContext'
 import type { AiAnswer } from '../assistant'
+import { clearPageSuggestions, setPageSuggestions } from './floatingSuggestions'
 import { ScrollFade } from './ScrollFade'
 
 /**
@@ -109,6 +110,9 @@ export interface Suggestion {
 export function AiInsightBar({ summary, suggestions, question, answer, title = 'NORA suggests' }: { summary: ReactNode; suggestions: Suggestion[]; question: string; answer: AiAnswer; title?: string }) {
   const chat = useNoraChat()
   const id = useId()
+  // the same suggestions also appear above the floating NORA button while this page is open
+  useEffect(() => { setPageSuggestions(id, suggestions.slice(0, 3)) })
+  useEffect(() => () => clearPageSuggestions(id), [id])
   return (
     <section aria-labelledby={id} className="rounded-2xl border border-purple-100 bg-gradient-to-br from-purple-50 to-white p-5 shadow-card">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">

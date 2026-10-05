@@ -1,7 +1,9 @@
-import { Share2, Bell, Building2, ChevronDown, Loader2, MapPin, Menu, Moon, Network, RotateCcw, Search, Sparkles, Sun, BarChart3, TrendingUp, Activity, User, Users, Wrench, X, Bot, type LucideIcon } from 'lucide-react'
+import { ArrowRight, Share2, Bell, Building2, ChevronDown, Loader2, MapPin, Menu, Moon, Network, RotateCcw, Search, Sparkles, Sun, BarChart3, TrendingUp, Activity, User, Users, Wrench, X, Bot, type LucideIcon } from 'lucide-react'
+import { SHOW_EXPERTISE_GRAPH } from '../features'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { SCENARIOS, SCENARIO_IDS } from '../../mock/user'
+import { getSkill } from '../../nora/skillRegistry'
 import { NoraProvider, useNora, useNoraPanel, useNoraProcessing, useResetDemo } from '../NoraContext'
 import { allServices, cities, fmtDate } from '../selectors'
 import { actions, unreadMessages, unreadNotifications, useStore } from '../store'
@@ -11,6 +13,7 @@ import { Avatar, MENU_ITEM, Popover } from './bits'
 import { Logo } from './Logo'
 import { NoraPanel } from './NoraPanel'
 import { ToastProvider, useToast } from './Toast'
+import { usePageSuggestions } from './floatingSuggestions'
 import { TraceButton, TraceDrawer } from './TraceDrawer'
 
 interface NavItem {
@@ -23,7 +26,7 @@ interface NavItem {
 }
 
 /** The sidebar: the product's modules. Messages and notifications live in the top bar and account menu. */
-const NAV_MAIN: NavItem[] = [
+const NAV_ALL: NavItem[] = [
   { to: '/profile', label: 'Profile & Presence', icon: User },
   { to: '/graph', label: 'Expertise Graph', icon: Share2 },
   { to: '/listings', label: 'Listings', icon: Building2 },
@@ -34,6 +37,7 @@ const NAV_MAIN: NavItem[] = [
   { to: '/ai-visibility', label: 'AI Visibility', icon: Bot },
   { to: '/network', label: 'Network', icon: Network, also: ['/professionals', '/locations'] },
 ]
+const NAV_MAIN = NAV_ALL.filter((i) => SHOW_EXPERTISE_GRAPH || i.to !== '/graph')
 const isActive = (item: NavItem, path: string) => [item.to, ...(item.also ?? [])].some((t) => path === t || path.startsWith(`${t}/`))
 
 type Hit = { key: string; kind: 'agent' | 'city' | 'service'; label: string; sub: string; to: string }
@@ -256,11 +260,7 @@ function ThemeToggle() {
 }
 
 function TopBar() {
-  const { open, setOpen } = useNoraPanel()
-  const { state: nora } = useNora()
-  const processing = useNoraProcessing()
   const [drawer, setDrawer] = useState(false)
-  const needsYou = nora.status === 'SKILL_PROPOSED' || nora.status === 'WRITE_APPROVAL' || nora.status === 'RESULT_READY'
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
       <div className="flex h-16 items-center gap-2 px-4 md:px-6">
@@ -268,11 +268,6 @@ function TopBar() {
         <Link to="/profile" className="flex items-center gap-2 lg:hidden"><Logo size={26} /></Link>
         <div className="ml-auto flex items-center gap-2 sm:gap-3">
           <div className="hidden w-[190px] md:block xl:w-[280px]"><SearchBox /></div>
-          <button onClick={() => setOpen(!open)} aria-pressed={open} aria-label="Ask NORA" className={`relative inline-flex h-10 items-center gap-2 rounded-lg border px-3.5 text-sm font-semibold ${open ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-blue-600 bg-white text-blue-700 hover:bg-blue-50'}`}>
-            {processing ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-            <span className="hidden sm:inline">Ask NORA</span>
-            {needsYou && !open && <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-white" aria-label="Needs your attention" />}
-          </button>
           <TraceButton />
           <ResetDemo />
           <div className="hidden sm:block"><ThemeToggle /></div>
@@ -340,6 +335,81 @@ function NoraDialog() {
   )
 }
 
+/** What the suggestion says to do, in the user's words. The skill's own name is a fallback. */
+const ACTION_TITLE: Record<string, string> = {
+  'profile-completion': 'Complete your profile',
+  'listing-optimization': 'Fix your incomplete listings',
+  'web-analytics-insight': 'See what changed in your traffic',
+}
+const DISMISSED = 'nora-suggestions-dismissed-paths'
+const readDismissed = (): string[] => { try { return JSON.parse(sessionStorage.getItem(DISMISSED) ?? '[]') as string[] } catch { return [] } }
+
+interface Card { key: string; title: string; detail: string; impact?: string; run: () => void }
+
+/**
+ * NORA's launcher: a round floating button in the corner, with suggestions stacked above it. On a page with its own
+ * "NORA suggests" strip these are that page's suggestions; otherwise they are the issues NORA found. Each card does its
+ * thing (a page suggestion runs; an issue opens NORA with that skill selected). The button spins while NORA works and
+ * shows a dot when it needs you.
+ */
+function FloatingNora() {
+  const { open, setOpen } = useNoraPanel()
+  const { engine, state: nora } = useNora()
+  const processing = useNoraProcessing()
+  const { pathname } = useLocation()
+  const pageItems = usePageSuggestions()
+  const [dismissed, setDismissed] = useState(readDismissed)
+  const needsYou = nora.status === 'SKILL_PROPOSED' || nora.status === 'WRITE_APPROVAL' || nora.status === 'RESULT_READY'
+
+  const pick = (skillId: string) => { engine.select(skillId); setOpen(true) }
+  const issues = nora.status === 'SKILL_PROPOSED' ? [...nora.evaluations].filter((e) => e.rank).sort((a, b) => a.rank! - b.rank!).slice(0, 3) : []
+  const cards: Card[] = pageItems.length
+    ? pageItems.slice(0, 3).map((p) => ({ key: p.id, title: p.title, detail: p.detail, impact: p.impact, run: p.onRun }))
+    : issues.map((e) => {
+        const outcome = nora.graph ? getSkill(e.skillId)?.expectedOutcome?.(nora.graph) : null
+        return { key: e.skillId, title: ACTION_TITLE[e.skillId] ?? e.name, detail: outcome ? `${outcome.label}: ${outcome.before} → ${outcome.after}` : e.reason, run: () => pick(e.skillId) }
+      })
+  const showSuggestions = cards.length > 0 && !open && !dismissed.includes(pathname) && !(processing && !pageItems.length)
+  const dismiss = () => {
+    const next = [...new Set([...dismissed, pathname])]
+    setDismissed(next)
+    try { sessionStorage.setItem(DISMISSED, JSON.stringify(next)) } catch { /* storage unavailable */ }
+  }
+  return (
+    <div className="pointer-events-none fixed bottom-5 right-5 z-40 flex flex-col items-end gap-2.5 sm:bottom-6 sm:right-6" style={{ marginBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+      {showSuggestions && (
+        <div key={pathname} className="pointer-events-auto flex w-[min(300px,calc(100vw-40px))] flex-col items-stretch gap-2" role="group" aria-label="Issues NORA found">
+          <div className="nora-rise flex items-center justify-between rounded-full bg-white/95 py-1 pl-3 pr-1.5 text-xs font-semibold text-slate-700 shadow-sm ring-1 ring-purple-100" style={{ animationDelay: '0ms' }}>
+            <span>{pageItems.length ? 'NORA suggests for this page' : `NORA can fix ${cards.length} ${cards.length === 1 ? 'thing' : 'things'} for you`}</span>
+            <button onClick={dismiss} aria-label="Hide suggestions" title="Hide on this page for this session" className="rounded-full p-1 text-slate-400 hover:bg-white hover:text-slate-700"><X size={14} /></button>
+          </div>
+          {[...cards].reverse().map((c, i) => (
+            <button
+              key={c.key} onClick={c.run} className="nora-rise group flex items-center gap-3 rounded-2xl border border-purple-200 bg-white p-3 pr-2.5 text-left shadow-[0_8px_24px_rgba(124,58,237,0.18)] transition hover:-translate-y-0.5 hover:border-purple-400"
+              style={{ animationDelay: `${(i + 1) * 110}ms` }}
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-pink-400 to-purple-500 text-white"><Sparkles size={16} /></span>
+              <span className="min-w-0 flex-1">
+                <span className="flex flex-wrap items-center gap-x-2 text-sm font-semibold text-slate-900">{c.title}{c.impact && <span className="rounded-full bg-emerald-50 px-1.5 py-px text-[10.5px] font-semibold text-emerald-700">{c.impact}</span>}</span>
+                <span className="block text-xs leading-snug text-slate-500">{c.detail}</span>
+              </span>
+              <span aria-hidden className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-purple-50 text-purple-600 transition group-hover:translate-x-0.5 group-hover:bg-purple-600 group-hover:text-white"><ArrowRight size={16} className="nora-nudge" /></span>
+            </button>
+          ))}
+        </div>
+      )}
+      <button
+        onClick={() => setOpen(!open)} aria-pressed={open} aria-label="Ask NORA" title={open ? 'Minimize NORA' : 'Ask NORA'}
+        className={`pointer-events-auto relative flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-pink-500 to-purple-600 text-white shadow-[0_8px_24px_rgba(124,58,237,0.45)] ring-4 ring-white/70 transition hover:scale-105 hover:brightness-110 focus-visible:outline-none focus-visible:ring-blue-400 ${showSuggestions ? 'nora-bob' : ''}`}
+      >
+        {showSuggestions && <span aria-hidden className="nora-ping absolute inset-0 rounded-full bg-purple-500/50" />}
+        <span className="relative">{processing ? <Loader2 size={24} className="animate-spin" /> : <Sparkles size={24} />}</span>
+        {needsYou && !open && <span className="absolute -right-0.5 -top-0.5 h-3.5 w-3.5 rounded-full bg-rose-500 ring-2 ring-white" aria-label="Needs your attention" />}
+      </button>
+    </div>
+  )
+}
+
 function Shell() {
   const { open } = useNoraPanel()
   return (
@@ -349,6 +419,7 @@ function Shell() {
         <TopBar />
         <main className="min-w-0 flex-1 p-4 md:p-6"><Outlet /></main>
       </div>
+      <FloatingNora />
       {open && <NoraDialog />}
       <TraceDrawer />
       <NotificationToaster />

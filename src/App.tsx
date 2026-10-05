@@ -1,4 +1,5 @@
 import { lazy, Suspense } from 'react'
+import { SHOW_EXPERTISE_GRAPH } from './profile/features'
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom'
 import { useAuth } from './profile/auth'
 import { SiteLayout } from './profile/ui/SiteLayout'
@@ -42,7 +43,7 @@ export default function App() {
             <Route path="/connections" element={<ConnectionsPage />} />
             <Route path="/analytics" element={<WebAnalyticsPage />} />
             <Route path="/search-rank" element={<SearchRankPage />} />
-            <Route path="/graph" element={<GraphPage />} />
+            <Route path="/graph" element={SHOW_EXPERTISE_GRAPH ? <GraphPage /> : <Navigate to="/profile" replace />} />
             <Route path="/search-rank/how-it-works" element={<SrsGuidePage />} />
             <Route path="/ai-visibility" element={<AiVisibilityPage />} />
             <Route path="/network" element={<NetworkPage />} />
