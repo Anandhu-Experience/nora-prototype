@@ -12,6 +12,7 @@ import { connectionsStore } from '../presence/connections'
 import { resetPresence } from '../presence/persist'
 import { actions as profileActions, getState as getProfileState, subscribe as subscribeProfile, useStore } from './store'
 import type { Agent } from './types'
+import { suggestionsHidden } from './ui/suggestionsHidden'
 import { ReferralModal } from './ui/ReferralModal'
 import { graphChanges } from './ui/graphDiff'
 
@@ -191,6 +192,7 @@ export function NoraProvider({ children }: { children: ReactNode }) {
   const fixing = useRef(false)
   const fix = useCallback(
     (domain?: string) => {
+      suggestionsHidden.set(false) // the issue being fixed must be visible in NORA
       setOpen(true)
       setFocusTick((n) => n + 1)
       const s = engine.getState()
@@ -227,8 +229,9 @@ export function NoraProvider({ children }: { children: ReactNode }) {
     }
     if (!changed || !fixing.current) return
     if (nora.status === 'WRITE_APPROVAL') {
-      const consent = getSkill(nora.selectedSkillId ?? '')?.consent
-      say(consent ? `Ready. Click “${consent.cta}” in the card above and ${consent.provider} will ask you to allow access. Nothing is connected until you do.` : 'The draft is ready. Review the before and after in the card above, then approve to apply it.')
+      const picked = getSkill(nora.selectedSkillId ?? '')
+      const consent = picked?.consent
+      say(picked?.editDraft ? 'The reply is ready. Read it, change anything you like, then post it from the card above. Nothing is posted until you do.' : consent ? `Ready. Click “${consent.cta}” in the card above and ${consent.provider} will ask you to allow access. Nothing is connected until you do.` : 'The draft is ready. Review the before and after in the card above, then approve to apply it.')
     }
     else if (nora.status === 'COMPLETED') {
       const changes = nora.previousGraph && nora.graph ? graphChanges(nora.previousGraph, nora.graph) : []

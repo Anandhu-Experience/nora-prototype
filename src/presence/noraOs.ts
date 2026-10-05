@@ -30,7 +30,7 @@ export interface OsIssue {
   to: string
   cta: string
   /** When set, "Fix with NORA" runs this NORA domain instead of just navigating. */
-  nora?: 'profile' | 'connections'
+  nora?: 'profile' | 'connections' | 'reviews'
 }
 
 const unreplied = (a: Agent) => a.reviews.filter((r) => !r.reply?.trim())
@@ -67,7 +67,7 @@ export function collectIssues(a: Agent): OsIssue[] {
     for (const i of websiteIssues(web).slice(0, 5)) out.push({ id: `web:${i.id}`, module: 'Web Analytics', title: i.label, detail: i.fix, impact: `+${i.gain} pts`, severity: i.gain >= 40 ? 'high' : 'medium', to: '/analytics', cta: 'Open Web Analytics' })
   }
 
-  for (const r of unreplied(a)) out.push({ id: `review:${r.id}`, module: 'Reviews', title: `Reply to ${r.author}’s ${r.rating}-star review`, detail: r.text.length > 110 ? `${r.text.slice(0, 107)}…` : r.text, severity: r.rating >= 4 ? 'low' : 'medium', to: '/profile?tab=reviews', cta: 'Reply' })
+  for (const r of unreplied(a)) out.push({ id: `review:${r.id}`, module: 'Reviews', title: `Reply to ${r.author}’s ${r.rating}-star review`, detail: r.text.length > 110 ? `${r.text.slice(0, 107)}…` : r.text, severity: r.rating >= 4 ? 'low' : 'medium', to: '/profile?tab=reviews', cta: 'Fix with NORA', nora: 'reviews' })
 
   for (const s of voceSuggestions(voceStore.get(), a.specialties[0] ?? 'mortgages')) out.push({ id: `ai:${s.id}`, module: 'AI Visibility', title: s.title, detail: s.detail, impact: s.impact, severity: 'low', to: '/ai-visibility', cta: s.cta })
 
@@ -81,6 +81,7 @@ export function collectIssues(a: Agent): OsIssue[] {
 export function skillForIssue(id: string): string | null {
   if (id === 'conn:google') return 'connection-setup'
   if (id === 'profile:specialties' || id === 'profile:bio') return 'profile-completion'
+  if (id.startsWith('review:')) return 'review-reply'
   return null
 }
 

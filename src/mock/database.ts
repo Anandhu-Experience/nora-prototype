@@ -1,7 +1,7 @@
 import { actions as profileStore, getState as profileState } from '../profile/store'
 import { ratingStats } from '../profile/selectors'
 import type { BioInput } from '../profile/aiTasks'
-import type { Agent } from '../profile/types'
+import type { Agent, Review } from '../profile/types'
 import type { Database, Profile, ScenarioId } from './types'
 import { connectionsPoints, connectionsStore, isConnected } from '../presence/connections'
 import { DEFAULT_SCENARIO, SCENARIOS } from './user'
@@ -49,6 +49,23 @@ export function readBioFacts(): BioInput {
   }
 }
 
+const unrepliedOf = (a: Agent): Review[] =>
+  a.reviews.filter((r) => !r.reply?.trim()).sort((x, y) => y.rating - x.rating || y.date.localeCompare(x.date))
+
+/** What a review reply needs: who is replying, and the reviews with no reply, best-rated and newest first. */
+export function readReviewFacts(): { agentFirstName: string; agentTitle: string; unreplied: Review[] } {
+  const a = viewer()
+  return { agentFirstName: a.name.replace(/^agent\s+/i, '').trim().split(/\s+/)[0] || 'there', agentTitle: a.title, unreplied: structuredClone(unrepliedOf(a)) }
+}
+
+/** Save a public reply on the Profile page, with activity and a notification when NORA wrote it. */
+export function writeReviewReply(reviewId: string, reply: string): void {
+  const a = viewer()
+  const r = a.reviews.find((x) => x.id === reviewId)
+  if (!r) throw new Error(`Review ${reviewId} not found`)
+  profileStore.patchAgent(a.id, { reviews: a.reviews.map((x) => (x.id === reviewId ? { ...x, reply } : x)) }, { activity: `NORA replied to ${r.author}’s review`, notify: `NORA replied to ${r.author}’s review` })
+}
+
 const LABELS: Record<keyof Profile, string> = {
   name: 'name', photoUrl: 'photo', headline: 'headline', phone: 'phone number', location: 'location', bio: 'bio', specialties: 'specialties',
 }
@@ -94,5 +111,6 @@ export function snapshotDatabase(): Database {
   const profile = readProfile()
   // like the profile, the 'live' scenario reads linked accounts from the Connections page; the demo scenarios use their fixture
   const accounts = scenario === 'live' ? { google: isConnected(connectionsStore.get(), 'google'), points: connectionsPoints(connectionsStore.get()) } : db.accounts
-  return structuredClone({ ...db, profile, accounts, user: { ...db.user, name: profile.name.replace(/^agent\s+/i, '') } })
+  const reviews = scenario === 'live' ? { total: viewer().reviews.length, unreplied: unrepliedOf(viewer()).length } : db.reviews
+  return structuredClone({ ...db, profile, accounts, reviews, user: { ...db.user, name: profile.name.replace(/^agent\s+/i, '') } })
 }

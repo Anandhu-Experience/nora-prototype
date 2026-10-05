@@ -1,6 +1,7 @@
 import { connect, connectionMeta } from '../presence/connections'
-import { getDb, readBioFacts, readProfile, snapshotDatabase, writeProfile } from './database'
+import { getDb, readBioFacts, readProfile, readReviewFacts, snapshotDatabase, writeProfile, writeReviewReply } from './database'
 import type { BioInput } from '../profile/aiTasks'
+import type { Review } from '../profile/types'
 import type { Accounts, Analytics, Connections, Listing, Profile, VoceAccount } from './types'
 
 /**
@@ -72,6 +73,20 @@ export async function connectGoogle(): Promise<Accounts> {
   const db = getDb()
   if (!db.accounts.google) db.accounts = { google: true, points: db.accounts.points + connectionMeta('google').points }
   return snapshotDatabase().accounts
+}
+
+/** The reviews with no public reply, and who would be replying. */
+export async function getReviewsToReply(): Promise<{ agentFirstName: string; agentTitle: string; unreplied: Review[] }> {
+  await delay()
+  return readReviewFacts()
+}
+
+/** Post a public reply. Callers must only reach this after the user approved the text. */
+export async function replyToReview(reviewId: string, text: string): Promise<void> {
+  await delay()
+  writeReviewReply(reviewId, text)
+  const db = getDb()
+  if (db.reviews.unreplied > 0) db.reviews = { ...db.reviews, unreplied: db.reviews.unreplied - 1 }
 }
 
 export async function getVoce(): Promise<VoceAccount> {

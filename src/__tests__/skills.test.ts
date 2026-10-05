@@ -22,9 +22,9 @@ async function run(skill: Skill) {
 }
 
 describe('registry', () => {
-  it('has the five skills with unique ids and docs', () => {
-    expect(skillRegistry.map((s) => s.id)).toEqual(['profile-completion', 'connection-setup', 'listing-optimization', 'web-analytics-insight', 'voce-explore'])
-    expect(new Set(skillRegistry.map((s) => s.id)).size).toBe(5)
+  it('has the six skills with unique ids and docs', () => {
+    expect(skillRegistry.map((s) => s.id)).toEqual(['profile-completion', 'connection-setup', 'review-reply', 'listing-optimization', 'web-analytics-insight', 'voce-explore'])
+    expect(new Set(skillRegistry.map((s) => s.id)).size).toBe(6)
     for (const s of skillRegistry) expect(s.doc).toContain('## When to use')
   })
 

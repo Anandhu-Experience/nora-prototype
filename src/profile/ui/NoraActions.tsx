@@ -1,24 +1,16 @@
 import { Check, CheckCircle2, ChevronRight, ExternalLink, Eye, EyeOff, Info, Loader2, ShieldCheck, Square, X } from 'lucide-react'
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { NoraEngine } from '../../nora/noraEngine'
 import type { Evaluation, NoraState } from '../../nora/noraMachine'
 import { getSkill } from '../../nora/skillRegistry'
 import type { Skill } from '../../skills/types'
 import { useNora, useNoraFocus, useNoraProcessing, useNoraStop } from '../NoraContext'
 import { ConsentModal } from './ConsentModal'
+import { suggestionsHidden } from './suggestionsHidden'
 import { graphChanges } from './graphDiff'
 import { BTN_GHOST, BTN_PRIMARY } from './Modal'
 
-/** Whether NORA's suggestion cards are tucked away. Remembered in the browser; shared so the panel can shrink when they are hidden. */
-const HIDE_KEY = 'nora-suggestions-hidden'
-const hideListeners = new Set<() => void>()
-const readHidden = (): boolean => { try { return localStorage.getItem(HIDE_KEY) === '1' } catch { return false } }
-let hiddenNow = readHidden()
-export const suggestionsHidden = {
-  get: () => hiddenNow,
-  set: (v: boolean) => { hiddenNow = v; try { localStorage.setItem(HIDE_KEY, v ? '1' : '0') } catch { /* storage unavailable */ } hideListeners.forEach((l) => l()) },
-  use: (): boolean => useSyncExternalStore((fn) => { hideListeners.add(fn); return () => { hideListeners.delete(fn) } }, () => hiddenNow),
-}
+export { suggestionsHidden }
 
 const WORKING: Record<string, string> = {
   IDLE: 'Signing you in…',
@@ -47,7 +39,10 @@ export function NoraActions() {
   }
 
   if (PROPOSED_OR_RUNNING.has(s)) {
-    const queue = [...state.evaluations].filter((e) => e.rank).sort((a, b) => a.rank! - b.rank!)
+    // the chosen action comes first and is always shown while it runs, even if the user tucked the suggestions away
+    const chosen = state.selectedSkillId
+    const queue = [...state.evaluations].filter((e) => e.rank).sort((a, b) => Number(b.skillId === chosen) - Number(a.skillId === chosen) || a.rank! - b.rank!)
+    const shown = hidden && s !== 'SKILL_PROPOSED' ? queue.filter((e) => e.skillId === chosen) : queue
     return (
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-2">
@@ -57,7 +52,7 @@ export function NoraActions() {
             <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-500"><span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" /> NORA live</span>
           </span>
         </div>
-        {!hidden && queue.map((e) => <ActionCard key={e.skillId} engine={engine} state={state} evaluation={e} />)}
+        {(!hidden || shown.length > 0 && s !== 'SKILL_PROPOSED') && shown.map((e) => <ActionCard key={e.skillId} engine={engine} state={state} evaluation={e} />)}
       </div>
     )
   }
@@ -108,6 +103,8 @@ export function NoraActions() {
 function ActionCard({ engine, state, evaluation: e }: { engine: NoraEngine; state: NoraState; evaluation: Evaluation }) {
   const [analysis, setAnalysis] = useState(false)
   const [consenting, setConsenting] = useState(false)
+  /** The user's own wording for a skill that lets them edit the draft; null means untouched. */
+  const [edited, setEdited] = useState<string | null>(null)
   const ref = useRef<HTMLDivElement>(null)
   const actionsRef = useRef<HTMLDivElement>(null)
   const focusTick = useNoraFocus()
@@ -118,6 +115,16 @@ function ActionCard({ engine, state, evaluation: e }: { engine: NoraEngine; stat
   const selected = e.skillId === state.selectedSkillId
   const s = state.status
   const outcome = skill.expectedOutcome?.(graph)
+
+  useEffect(() => setEdited(null), [state.draft?.summary])
+  const canEdit = !!skill.editDraft && s === 'WRITE_APPROVAL'
+  const draftText = edited ?? state.draft?.changes[0]?.after ?? ''
+  const editInvalid = canEdit && (!draftText.trim() || (skill.editLimit ? draftText.length > skill.editLimit : false))
+  /** Approving posts exactly what is in the box: the edit is handed to the engine first. */
+  const approve = () => {
+    if (canEdit && edited !== null && edited !== state.draft?.changes[0]?.after) engine.editDraft(edited.trim())
+    void engine.approveWrite()
+  }
 
   // keep the user's eyes on the current action as it moves: the card while NORA works, the approve buttons once it needs a decision
   useEffect(() => {
@@ -183,19 +190,29 @@ function ActionCard({ engine, state, evaluation: e }: { engine: NoraEngine; stat
                 : `drafted with ${skill.allowedModel}`}
           </p>
           <div className="mt-3 space-y-2.5">
-            {state.draft!.changes.map((c) => (
+            {state.draft!.changes.map((c, i) => (
               <div key={c.label} className="overflow-hidden rounded-lg border border-slate-200 text-xs">
                 <div className="bg-slate-50 px-2.5 py-1 font-semibold text-slate-600">{c.label}</div>
                 <div className="border-b border-slate-200 p-2.5"><div className="text-[10px] font-semibold uppercase tracking-wider text-rose-600">Before</div><p className="mt-0.5 text-slate-500">{c.before}</p></div>
-                <div className="bg-emerald-50/60 p-2.5"><div className="text-[10px] font-semibold uppercase tracking-wider text-emerald-700">After</div><p className="mt-0.5 text-slate-900">{c.after}</p></div>
+                <div className="bg-emerald-50/60 p-2.5">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-emerald-700">After{i === 0 && skill.editDraft ? ' (you can edit it)' : ''}</div>
+                  {i === 0 && canEdit
+                    ? (
+                      <>
+                        <textarea value={draftText} onChange={(e) => setEdited(e.target.value)} rows={5} aria-label="Reply text" className="mt-1 w-full resize-y rounded-md border border-emerald-200 bg-white p-2 text-xs leading-relaxed text-slate-900 focus:border-emerald-400 focus:outline-none" />
+                        {skill.editLimit && <div className={`mt-0.5 text-right text-[10px] ${draftText.length > skill.editLimit ? 'text-rose-600' : 'text-slate-400'}`}>{draftText.length} / {skill.editLimit}</div>}
+                      </>
+                    )
+                    : <p className="mt-0.5 text-slate-900">{c.after}</p>}
+                </div>
               </div>
             ))}
           </div>
           <p className="mt-2 text-[11px] text-slate-500">{skill.consent ? `Nothing is connected until you allow access on ${skill.consent.provider}’s screen.` : 'Nothing is saved until you approve.'}</p>
           <div ref={actionsRef} className="mt-2.5 flex justify-end gap-2">
             <button className={`${BTN_GHOST} ${SMALL}`} disabled={s !== 'WRITE_APPROVAL'} onClick={() => void engine.rejectWrite()}><X size={13} /> Reject</button>
-            <button className={`${BTN_PRIMARY} ${SMALL}`} disabled={s !== 'WRITE_APPROVAL'} onClick={() => (skill.consent ? setConsenting(true) : void engine.approveWrite())}>
-              {s === 'WRITING' ? <Loader2 size={13} className="animate-spin" /> : skill.consent ? <ShieldCheck size={13} /> : <Check size={13} />} {s === 'WRITING' ? (skill.consent ? 'Connecting…' : 'Applying…') : (skill.consent?.cta ?? 'Approve & Apply')}
+            <button className={`${BTN_PRIMARY} ${SMALL}`} disabled={s !== 'WRITE_APPROVAL' || editInvalid} onClick={() => (skill.consent ? setConsenting(true) : approve())}>
+              {s === 'WRITING' ? <Loader2 size={13} className="animate-spin" /> : skill.consent ? <ShieldCheck size={13} /> : <Check size={13} />} {s === 'WRITING' ? (skill.consent ? 'Connecting…' : 'Applying…') : (skill.consent?.cta ?? skill.approveCta ?? 'Approve & Apply')}
             </button>
           </div>
           {consenting && skill.consent && s === 'WRITE_APPROVAL' && <ConsentModal request={skill.consent} onCancel={() => setConsenting(false)} onAllow={() => { setConsenting(false); void engine.approveWrite() }} />}

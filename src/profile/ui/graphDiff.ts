@@ -16,6 +16,7 @@ export function graphChanges(before: Graph, after: Graph): GraphChange[] {
     ['listings.incomplete', before.listings.incomplete, after.listings.incomplete],
     ['accounts.google', before.accounts.google, after.accounts.google],
     ['accounts.points', before.accounts.points, after.accounts.points],
+    ['reviews.unreplied', before.reviews.unreplied, after.reviews.unreplied],
   ]
   return pairs
     .filter(([, b, a]) => show(b) !== show(a))

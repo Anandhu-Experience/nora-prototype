@@ -23,6 +23,7 @@ When you land on the app, suggestions appear as action cards **above the round f
 NORA also appears after the same wait when you **switch to a different person's profile** (it is about to be asked about them, and the greeting says whose profile you are viewing). Opening or minimizing it yourself first cancels that, a second switch restarts the wait, and ordinary page navigation does nothing. It is chat-first:
 
 - **Hello {name}**, then **what NORA found**: one numbered action card per applicable skill, in ranked order, each with tags, the expected outcome (e.g. profile completeness 85% → 100%) and *View Analysis* / *Review with NORA*.
+- **Hide / Show** tucks the suggestion cards away (remembered in the browser). The action you chose always comes first and is never hidden: picking an issue from the floating panel, *Fix with NORA* or a NORA OS issue shows it again, and an action that is running or waiting for your approval stays visible.
 - **⚡ quick actions** and a **message box** are hidden behind footer icons; below them a self-advancing slider of tool chips (pauses on hover, drag or swipe, and with reduced motion).
 - **Minimize** (—), Esc or a click outside minimizes NORA. The floating NORA button shows a spinner while it works and a red dot when it needs you, and brings it back.
 - **Stop** appears while NORA is reading, validating or drafting. It discards the run, changes nothing and brings the proposal back. It is not offered once NORA is writing.
@@ -37,6 +38,8 @@ read profile data → ask every skill "do you apply?" → rank → select
   → Approval 2 (write: before/after, Reject / Approve & Apply) → skill actions.ts → mock API → profile store
   → rebuild graph → re-evaluate → next skill, or "You're all set" + Explore (VOCE)
 ```
+
+**Review Reply (a skill the AI model writes).** *Review Reply* (priority 85) proposes *N of your reviews have no reply yet. Shall I draft one in your voice?* Approval 1 reads the unreplied reviews and picks the best-rated, newest one; the server then writes the reply with `claude-haiku-4-5` from only the reviewer's first name, the rating and the review text (masked, injection-checked, fenced as data and checked again on the server). The card shows the review and the reply in an editable box (500 characters); **Post reply** (Approval 2) saves exactly what is in the box on the review, with activity and a notification. If the model is unavailable or the review is blocked by the guardrails, a labelled template reply is offered instead and no model is called. It is `repeatable`: after one reply NORA offers the next unreplied review until none are left. The skill is `src/skills/reviews/`; the *Reviews Need Replies* scenario sets it up.
 
 **Connect Google (a skill that needs consent).** On login NORA ranks *Connection Setup* first (priority 95) while Google Business Profile is not connected: *Connect Google to unlock Insights. Shall I start?* (+30 points, 25 → 55 of 100). Approval 1 starts it; the draft card then shows the before and after and what Google will ask to allow; the second approval is a mock Google consent screen opened by **Continue to Google**. **Allow** connects Google through the mock API (the Connections page, Search Rank Score and NORA's graph all update) and NORA confirms in the chat. **Cancel** changes nothing and the card stays open to retry; **Reject** drops it. No AI model is used, no real Google account is touched and no password is asked for. The skill is `src/skills/connections/`, the consent screen `src/profile/ui/ConsentModal.tsx`, and a skill opts in with `consent` on the `Skill`.
 
@@ -138,6 +141,7 @@ The profile has a single source of truth, the Profile page store (`src/profile/s
 Account menu (avatar, top right) → **NORA demo scenario**:
 
 - **Live (Profile page data)** (default): NORA works on the real profile. Google is not connected and Matt has 3 specialties (5 needed), so NORA proposes connecting Google first, then the profile fix.
+- **Reviews Need Replies**: everything healthy except client reviews with no reply, so NORA drafts one with the AI model.
 - **Google Not Connected**: everything healthy except Google Business Profile, so NORA suggests connecting it.
 - **Profile Needs Improvement**: clears the bio and trims specialties *on the Profile page*.
 - **Everything Complete**: nothing actionable; VOCE create card.

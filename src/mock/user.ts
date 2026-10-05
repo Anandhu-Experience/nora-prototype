@@ -34,6 +34,7 @@ const base = (): Database => ({
   analytics: { visits: 1250, previousVisits: 1200 }, // +4%: not meaningful
   connections: { total: 42, inactive: 2 },
   accounts: { google: true, points: 55 },
+  reviews: { total: 3, unreplied: 0 },
   voce: { hasProfile: false, authorityScore: 0, articles: 0, questionsAnswered: 0 },
 })
 
@@ -53,6 +54,12 @@ const C = (): Database => ({
 const G = (): Database => ({
   ...base(),
   accounts: { google: false, points: 25 },
+})
+
+/** Everything healthy except two client reviews that have no public reply yet: the case NORA drafts a reply for. */
+const R = (): Database => ({
+  ...base(),
+  reviews: { total: 3, unreplied: 2 },
 })
 
 /** Profile gap + incomplete listing + rising traffic: exercises ranking. */
@@ -95,6 +102,12 @@ export const SCENARIOS: Record<ScenarioId, Omit<Scenario, 'data'> & { build: () 
     label: 'Google Not Connected',
     description: 'Everything healthy except Google Business Profile: NORA suggests connecting it.',
     build: G,
+  },
+  'review-reply-needed': {
+    id: 'review-reply-needed',
+    label: 'Reviews Need Replies',
+    description: 'Everything healthy except client reviews with no reply: NORA drafts one with the AI model.',
+    build: R,
   },
   'multi-action': {
     id: 'multi-action',

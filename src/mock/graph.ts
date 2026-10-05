@@ -21,6 +21,8 @@ export interface Graph {
   connections: { total: number; health: ConnectionHealth }
   /** Linked accounts that earn Search Rank Score points. */
   accounts: { google: boolean; points: number }
+  /** Client reviews, and how many have no public reply. */
+  reviews: { total: number; unreplied: number }
   analytics: { visits: number; changePct: number; trend: Trend }
   voce: {
     connected: boolean
@@ -57,6 +59,7 @@ export function buildGraphFrom(db: Database): Graph {
       health: inactiveRatio > 0.3 ? 'needs-attention' : 'healthy',
     },
     accounts: { ...db.accounts },
+    reviews: { ...db.reviews },
     analytics: { visits, changePct, trend },
     voce: {
       connected: db.voce.hasProfile,

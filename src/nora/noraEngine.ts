@@ -132,12 +132,14 @@ export class NoraEngine {
     if (prev && next) {
       const changes = graphChanges(prev, next)
       const still = skill.evaluate(next)
-      this.step('eval-quality', 'eval', 'Check quality and success', still.applies ? 'warn' : 'pass', still.applies ? `${skill.name} still applies: ${still.reason}` : `Resolved: ${skill.name} no longer applies`)
+      const more = !!skill.repeatable && still.applies
+      this.step('eval-quality', 'eval', 'Check quality and success', still.applies ? (more ? 'info' : 'warn') : 'pass', still.applies ? (more ? `This one is done. ${still.reason}, so NORA offers the next` : `${skill.name} still applies: ${still.reason}`) : `Resolved: ${skill.name} no longer applies`)
       this.step('eval-outcome', 'eval', 'Check the expected outcome', changes.length ? 'pass' : 'warn', `${this.expected ? `Expected ${this.expected.label}: ${this.expected.before} → ${this.expected.after}. ` : ''}Graph now: ${changes.length ? changes.map((c) => `${c.path} ${c.before} → ${c.after}`).join(', ') : 'no tracked field changed'}`)
     }
     const waiting = evaluateSkills(next ?? this.state.graph ?? buildGraph(), this.registry, this.state.handled).filter((e) => e.rank).length
     this.step('eval-record', 'eval', 'Record the eval result', 'pass', `Outcome “${outcome}” saved for this session. ${waiting} other skill${waiting === 1 ? '' : 's'} waiting`)
-    this.step('eval-improve', 'eval', 'Use the result to improve', 'info', 'This skill is not proposed again this session. A stored eval history that tunes ranking and routing is not built yet')
+    const again = !!skill.repeatable && !!next && skill.evaluate(next).applies
+    this.step('eval-improve', 'eval', 'Use the result to improve', 'info', `${again ? 'NORA will offer the next one.' : 'This skill is not proposed again this session.'} A stored eval history that tunes ranking and routing is not built yet`)
     this.endRun(verdict)
   }
 
@@ -280,8 +282,11 @@ export class NoraEngine {
       await skill.write!(draft!)
       if (epoch !== this.epoch) return
       this.upd('write', 'pass', `${skill.id} wrote through the mock API`)
-      this.markHandled(skill.id, 'applied')
-      this.go('COMPLETED', { previousGraph: graph, graph: buildGraph() }, 'Mock DB updated; graph rebuilt')
+      const rebuilt = buildGraph()
+      // a repeatable skill (one review per run) keeps being offered while it still applies
+      if (skill.repeatable && skill.evaluate(rebuilt).applies) this.dispatch({ type: 'patch', patch: { lastOutcome: { skillId: skill.id, outcome: 'applied' } } })
+      else this.markHandled(skill.id, 'applied')
+      this.go('COMPLETED', { previousGraph: graph, graph: rebuilt }, 'Mock DB updated; graph rebuilt')
       this.step('graph-update', 'update', 'Update the user graph', 'pass', graphChanges(graph!, this.state.graph!).map((c) => `${c.path} ${c.before} → ${c.after}`).join(', ') || 'No tracked field changed')
       this.evalAndEnd(skill, 'applied', 'completed', graph!, this.state.graph!)
       await this.pause(2.5) // linger so the graph update is visible
@@ -291,6 +296,16 @@ export class NoraEngine {
     } catch (e) {
       this.fail(epoch, e)
     }
+  }
+
+  /** The user changed the drafted text before approving. Only skills that declare `editDraft` allow it. */
+  editDraft(text: string): void {
+    if (this.state.status !== 'WRITE_APPROVAL' || !this.state.draft) return
+    const skill = this.skill(this.state.selectedSkillId)
+    if (!skill.editDraft) return
+    const next = skill.editDraft(this.state.draft, text)
+    this.dispatch({ type: 'patch', patch: { draft: next }, note: 'You edited the draft' })
+    this.step('edited', 'execute', 'You edited the text', 'info', `${text.length} characters. NORA posts exactly what you approve`)
   }
 
   /** User rejects the draft. Nothing was written, so nothing to undo. */

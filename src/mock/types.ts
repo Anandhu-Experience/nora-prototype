@@ -1,4 +1,4 @@
-export type ScenarioId = 'live' | 'profile-needed' | 'all-complete' | 'voce-exists' | 'multi-action' | 'google-needed'
+export type ScenarioId = 'live' | 'profile-needed' | 'all-complete' | 'voce-exists' | 'multi-action' | 'google-needed' | 'review-reply-needed'
 
 export interface User {
   id: string
@@ -40,6 +40,11 @@ export interface VoceAccount {
   questionsAnswered: number
 }
 
+export interface ReviewStats {
+  total: number
+  unreplied: number
+}
+
 export interface Accounts {
   google: boolean
   /** Connection points earned, out of 100. */
@@ -55,6 +60,8 @@ export interface Database {
   connections: Connections
   /** Linked accounts that earn Search Rank Score points (Google, Facebook...). Live scenario: read from the Connections page. */
   accounts: Accounts
+  /** Client reviews and how many have no public reply. Live scenario: read from the Profile page. */
+  reviews: ReviewStats
   voce: VoceAccount
 }
 

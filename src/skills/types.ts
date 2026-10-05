@@ -106,7 +106,7 @@ export interface Skill {
   id: string
   name: string
   description: string
-  domain: 'profile' | 'connections' | 'listings' | 'analytics' | 'voce'
+  domain: 'profile' | 'connections' | 'reviews' | 'listings' | 'analytics' | 'voce'
   kind: SkillKind
   /** Higher runs first. Explore skills sit at the bottom so they only surface when nothing else applies. */
   priority: number
@@ -117,6 +117,8 @@ export interface Skill {
    * for that consent instead of a plain "Approve & Apply", and the write only runs once it is granted.
    */
   consent?: ConsentRequest
+  /** One run handles one item (one review). While the skill still applies after a write, NORA offers the next one. */
+  repeatable?: boolean
   /** Mirrors SKILL.md. */
   whenToUse: string[]
   whenNotToUse: string[]
@@ -134,6 +136,12 @@ export interface Skill {
   // action
   buildDraftRequest?(validation: Validation): DraftRequest
   write?(draft: Draft): Promise<void>
+  /** Lets the user change the drafted text before approving. Returns the draft with the text in place. */
+  editDraft?(draft: Draft, text: string): Draft
+  /** Label of the approve button on the draft card (default "Approve & Apply"). */
+  approveCta?: string
+  /** Longest text the user may keep when editing the draft. */
+  editLimit?: number
   // insight
   insight?(validation: Validation): Insight
   // explore

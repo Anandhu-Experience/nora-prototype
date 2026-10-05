@@ -12,6 +12,7 @@ import { useTheme } from '../theme'
 import { logout } from '../auth'
 import { Avatar, MENU_ITEM, Popover } from './bits'
 import { Logo } from './Logo'
+import { suggestionsHidden } from './suggestionsHidden'
 import { NoraPanel } from './NoraPanel'
 import { ToastProvider, useToast } from './Toast'
 import { usePageSuggestions } from './floatingSuggestions'
@@ -340,6 +341,7 @@ function NoraDialog() {
 /** What the suggestion says to do, in the user's words. The skill's own name is a fallback. */
 const ACTION_TITLE: Record<string, string> = {
   'connection-setup': 'Connect Google to unlock Insights',
+  'review-reply': 'Reply to your reviews',
   'profile-completion': 'Complete your profile',
   'listing-optimization': 'Fix your incomplete listings',
   'web-analytics-insight': 'See what changed in your traffic',
@@ -368,7 +370,8 @@ function FloatingNora() {
   const needsYou = nora.status === 'SKILL_PROPOSED' || nora.status === 'WRITE_APPROVAL' || nora.status === 'RESULT_READY'
 
   const chat = useNoraChat()
-  const pick = (skillId: string) => { engine.select(skillId); setOpen(true) }
+  // choosing an issue always shows it in NORA, even if the suggestions were tucked away before
+  const pick = (skillId: string) => { suggestionsHidden.set(false); engine.select(skillId); setOpen(true) }
   /** A page suggestion opens NORA first; the page action is one click away inside it. */
   const openInNora = (p: { id: string; title: string; detail: string; cta: string; onRun: () => void }) => {
     const skill = PAGE_SKILL[p.id]
